@@ -67,8 +67,8 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
     if (!_ctrls[from].hasClients) return;
     final pos = _ctrls[from].position;
     final left = pos.pixels > 0.5;
-    final right = pos.maxScrollExtent > 0.5 &&
-        pos.pixels < pos.maxScrollExtent - 0.5;
+    final right =
+        pos.maxScrollExtent > 0.5 && pos.pixels < pos.maxScrollExtent - 0.5;
     if (left == _showLeftFade && right == _showRightFade) return;
     setState(() {
       _showLeftFade = left;
@@ -131,10 +131,7 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
     final setIndex = workout.sets.indexOf(set);
     if (setIndex < 0) return;
     setState(() {
-      workout.sets[setIndex] = ExerciseSet(
-        exercise: trimmed,
-        reps: set.reps,
-      );
+      workout.sets[setIndex] = ExerciseSet(exercise: trimmed, reps: set.reps);
     });
   }
 
@@ -159,8 +156,7 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
       final max = pos.maxScrollExtent;
       if (max <= 0) return;
       final viewport = pos.viewportDimension;
-      final target =
-          (col * cellW - (viewport - cellW) / 2).clamp(0.0, max);
+      final target = (col * cellW - (viewport - cellW) / 2).clamp(0.0, max);
       _syncing = true;
       for (final c in _ctrls) {
         if (!c.hasClients) continue;
@@ -305,8 +301,9 @@ class _ExerciseBlock extends StatelessWidget {
                                         Expanded(
                                           child: InkWell(
                                             onTap: () => onEdit(c),
-                                            borderRadius:
-                                                BorderRadius.circular(4),
+                                            borderRadius: BorderRadius.circular(
+                                              4,
+                                            ),
                                             child: Align(
                                               alignment: Alignment.centerLeft,
                                               child: AnimatedContainer(
@@ -315,9 +312,9 @@ class _ExerciseBlock extends StatelessWidget {
                                                 ),
                                                 padding:
                                                     const EdgeInsets.symmetric(
-                                                  horizontal: 4,
-                                                  vertical: 2,
-                                                ),
+                                                      horizontal: 4,
+                                                      vertical: 2,
+                                                    ),
                                                 decoration: BoxDecoration(
                                                   color: flashRep == c
                                                       ? scheme.primaryContainer
@@ -459,10 +456,7 @@ class _RepDialogState extends State<_RepDialog> {
           onPressed: () => Navigator.pop(context),
           child: const Text('cancel'),
         ),
-        TextButton(
-          onPressed: _submit,
-          child: Text(widget.actionLabel),
-        ),
+        TextButton(onPressed: _submit, child: Text(widget.actionLabel)),
       ],
     );
   }

@@ -86,7 +86,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
     if (q.isEmpty) return list;
     return list
         .where(
-          (w) => w.sets.any((s) => s.exercise.toLowerCase().contains(q)),
+          (w) =>
+              w.name.toLowerCase().contains(q) ||
+              w.sets.any((s) => s.exercise.toLowerCase().contains(q)),
         )
         .toList();
   }
@@ -115,7 +117,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
             child: TextField(
               controller: _query,
               decoration: const InputDecoration(
-                hintText: 'Search by exercise name',
+                hintText: 'Search by workout or exercise',
                 prefixIcon: Icon(Icons.search),
                 border: OutlineInputBorder(),
                 isDense: true,
@@ -131,8 +133,27 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     separatorBuilder: (_, _) => const Divider(height: 1),
                     itemBuilder: (context, i) {
                       final w = sessions[i];
+                      final dateLabel = _dateLabel(w.date);
+                      final name = w.name.trim();
+                      final hasCustomName =
+                          name.isNotEmpty && name != dateLabel;
+                      final textTheme = Theme.of(context).textTheme;
+
                       return ListTile(
-                        title: Text(_dateLabel(w.date)),
+                        title: hasCustomName
+                            ? Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    name,
+                                    style: textTheme.titleMedium,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  Text(dateLabel, style: textTheme.labelMedium),
+                                ],
+                              )
+                            : Text(dateLabel, style: textTheme.titleMedium),
                         subtitle: Text(
                           _preview(w),
                           maxLines: 1,
