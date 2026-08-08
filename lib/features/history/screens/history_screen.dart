@@ -1,69 +1,42 @@
 import 'package:flutter/material.dart';
-import 'package:gymtracker/features/workouts/models/rep.dart';
-import 'package:gymtracker/features/workouts/models/set.dart';
 import 'package:gymtracker/features/workouts/models/workouts.dart';
+import 'package:gymtracker/features/workouts/repository/workout_repository.dart';
 import 'package:gymtracker/features/workouts/widgets/Workout.dart';
 
 class HistoryScreen extends StatefulWidget {
-  const HistoryScreen({super.key});
+  final WorkoutRepository repository;
+
+  const HistoryScreen({super.key, required this.repository});
 
   @override
-  State<HistoryScreen> createState() => _HistoryScreenState();
+  State<HistoryScreen> createState() => HistoryScreenState();
 }
 
-class _HistoryScreenState extends State<HistoryScreen> {
+class HistoryScreenState extends State<HistoryScreen> {
   final _query = TextEditingController();
+  List<Workout> _sessions = [];
+  bool _loading = true;
 
-  // ponytail: in-memory samples until persistence exists
-  late final List<Workout> _sessions = [
-    Workout(
-      name: 'Today',
-      date: DateTime.now(),
-      sets: [
-        ExerciseSet(
-          exercise: 'bench',
-          reps: [Rep(weight: 70, reps: 8), Rep(weight: 70, reps: 8)],
-        ),
-        ExerciseSet(
-          exercise: 'squats',
-          reps: [Rep(weight: 100, reps: 10)],
-        ),
-      ],
-    ),
-    Workout(
-      name: 'Pull',
-      date: DateTime.now().subtract(const Duration(days: 2)),
-      sets: [
-        ExerciseSet(
-          exercise: 'deadlifts',
-          reps: [Rep(weight: 120, reps: 5), Rep(weight: 130, reps: 5)],
-        ),
-        ExerciseSet(
-          exercise: 'rows',
-          reps: [Rep(weight: 60, reps: 10)],
-        ),
-      ],
-    ),
-    Workout(
-      name: 'Push',
-      date: DateTime.now().subtract(const Duration(days: 5)),
-      sets: [
-        ExerciseSet(
-          exercise: 'bench',
-          reps: [Rep(weight: 65, reps: 8)],
-        ),
-        ExerciseSet(
-          exercise: 'ohp',
-          reps: [Rep(weight: 40, reps: 8)],
-        ),
-      ],
-    ),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    reload();
+  }
 
   @override
   void dispose() {
     _query.dispose();
     super.dispose();
+  }
+
+  Future<void> reload() async {
+    setState(() => _loading = true);
+    final list = await widget.repository.getAll();
+    if (!mounted) return;
+    setState(() {
+      _sessions = list;
+      _loading = false;
+    });
   }
 
   String _dateLabel(DateTime date) {
@@ -76,13 +49,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
     return '${date.month}/${date.day}/${date.year}';
   }
 
-  String _preview(Workout w) =>
-      w.sets.map((s) => s.exercise).join(', ');
+  String _preview(Workout w) => w.sets.map((s) => s.exercise).join(', ');
 
   List<Workout> get _filtered {
     final q = _query.text.trim().toLowerCase();
-    final list = [..._sessions]
-      ..sort((a, b) => b.date.compareTo(a.date));
+    final list = [..._sessions]..sort((a, b) => b.date.compareTo(a.date));
     if (q.isEmpty) return list;
     return list
         .where(
@@ -98,10 +69,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
       MaterialPageRoute<void>(
         builder: (context) => Scaffold(
           appBar: AppBar(title: Text(_dateLabel(workout.date))),
-          body: WorkoutWidget(workout: workout),
+          body: WorkoutWidget(
+            workout: workout,
+            onChanged: (w) => widget.repository.saveWorkout(w),
+          ),
         ),
       ),
-    );
+    ).then((_) {
+      if (mounted) reload();
+    });
   }
 
   @override
@@ -126,43 +102,52 @@ class _HistoryScreenState extends State<HistoryScreen> {
             ),
           ),
           Expanded(
-            child: sessions.isEmpty
-                ? const Center(child: Text('No sessions'))
-                : ListView.separated(
-                    itemCount: sessions.length,
-                    separatorBuilder: (_, _) => const Divider(height: 1),
-                    itemBuilder: (context, i) {
-                      final w = sessions[i];
-                      final dateLabel = _dateLabel(w.date);
-                      final name = w.name.trim();
-                      final hasCustomName =
-                          name.isNotEmpty && name != dateLabel;
-                      final textTheme = Theme.of(context).textTheme;
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : sessions.isEmpty
+                    ? const Center(child: Text('No sessions'))
+                    : ListView.separated(
+                        itemCount: sessions.length,
+                        separatorBuilder: (_, _) => const Divider(height: 1),
+                        itemBuilder: (context, i) {
+                          final w = sessions[i];
+                          final dateLabel = _dateLabel(w.date);
+                          final name = w.name.trim();
+                          final hasCustomName =
+                              name.isNotEmpty && name != dateLabel;
+                          final textTheme = Theme.of(context).textTheme;
 
-                      return ListTile(
-                        title: hasCustomName
-                            ? Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    name,
+                          return ListTile(
+                            title: hasCustomName
+                                ? Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        name,
+                                        style: textTheme.titleMedium,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      Text(
+                                        dateLabel,
+                                        style: textTheme.labelMedium,
+                                      ),
+                                    ],
+                                  )
+                                : Text(
+                                    dateLabel,
                                     style: textTheme.titleMedium,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                  Text(dateLabel, style: textTheme.labelMedium),
-                                ],
-                              )
-                            : Text(dateLabel, style: textTheme.titleMedium),
-                        subtitle: Text(
-                          _preview(w),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        onTap: () => _openSession(w),
-                      );
-                    },
-                  ),
+                            subtitle: Text(
+                              _preview(w),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            onTap: () => _openSession(w),
+                          );
+                        },
+                      ),
           ),
         ],
       ),

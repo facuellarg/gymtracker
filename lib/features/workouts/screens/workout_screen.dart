@@ -1,46 +1,47 @@
 import 'package:flutter/material.dart';
-import 'package:gymtracker/features/workouts/models/rep.dart';
 import 'package:gymtracker/features/workouts/models/set.dart';
 import 'package:gymtracker/features/workouts/models/workouts.dart';
+import 'package:gymtracker/features/workouts/repository/workout_repository.dart';
 import 'package:gymtracker/features/workouts/widgets/Workout.dart';
 
 class WorkoutScreen extends StatefulWidget {
-  const WorkoutScreen({super.key});
+  final WorkoutRepository repository;
+
+  const WorkoutScreen({super.key, required this.repository});
 
   @override
   State<WorkoutScreen> createState() => _WorkoutScreenState();
 }
 
 class _WorkoutScreenState extends State<WorkoutScreen> {
-  late final Workout workout = Workout(
-    name: 'Today',
-    date: DateTime.now(),
-    sets: [
-      ExerciseSet(
-        exercise: 'bench',
-        reps: [
-          Rep(weight: 60, reps: 8),
-          Rep(weight: 70, reps: 8),
-          Rep(weight: 70, reps: 8),
-          Rep(weight: 70, reps: 8),
-        ],
-      ),
-      ExerciseSet(
-        exercise: 'squats',
-        reps: [
-          Rep(weight: 100, reps: 10),
-          Rep(weight: 100, reps: 10),
-        ],
-      ),
-      ExerciseSet(
-        exercise: 'deadlifts',
-        reps: [
-          Rep(weight: 120, reps: 5),
-          Rep(weight: 130, reps: 5),
-        ],
-      ),
-    ],
-  );
+  Workout? _workout;
+  Object? _loadError;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final w = await widget.repository.getOrCreateToday();
+      if (!mounted) return;
+      setState(() {
+        _workout = w;
+        _loadError = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loadError = e);
+    }
+  }
+
+  Future<void> _save() async {
+    final w = _workout;
+    if (w == null) return;
+    await widget.repository.saveWorkout(w);
+  }
 
   String _titleFor(DateTime date) {
     final now = DateTime.now();
@@ -53,6 +54,8 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
   }
 
   Future<void> _editWorkoutName() async {
+    final workout = _workout;
+    if (workout == null) return;
     final dateLabel = _titleFor(workout.date);
     final initial =
         workout.name.trim().isEmpty ? dateLabel : workout.name.trim();
@@ -63,9 +66,12 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     final trimmed = name?.trim() ?? '';
     if (trimmed.isEmpty || !mounted) return;
     setState(() => workout.name = trimmed);
+    await _save();
   }
 
   Future<void> _addExercise() async {
+    final workout = _workout;
+    if (workout == null) return;
     final name = await showDialog<String>(
       context: context,
       builder: (context) => const _AddExerciseDialog(),
@@ -75,10 +81,24 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     setState(() {
       workout.sets.add(ExerciseSet(exercise: trimmed, reps: []));
     });
+    await _save();
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_loadError != null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Today')),
+        body: Center(child: Text('Failed to load: $_loadError')),
+      );
+    }
+    final workout = _workout;
+    if (workout == null) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     final dateLabel = _titleFor(workout.date);
     final name = workout.name.trim();
     final hasCustomName = name.isNotEmpty && name != dateLabel;
@@ -111,7 +131,10 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
           ),
         ],
       ),
-      body: WorkoutWidget(workout: workout),
+      body: WorkoutWidget(
+        workout: workout,
+        onChanged: (w) => widget.repository.saveWorkout(w),
+      ),
     );
   }
 }

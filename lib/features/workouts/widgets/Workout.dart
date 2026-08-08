@@ -5,8 +5,13 @@ import 'package:gymtracker/features/workouts/models/workouts.dart';
 
 class WorkoutWidget extends StatefulWidget {
   final Workout workout;
+  final Future<void> Function(Workout workout)? onChanged;
 
-  const WorkoutWidget({super.key, required this.workout});
+  const WorkoutWidget({
+    super.key,
+    required this.workout,
+    this.onChanged,
+  });
 
   @override
   State<WorkoutWidget> createState() => _WorkoutWidgetState();
@@ -96,6 +101,7 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
       _focusCol = set.reps.length - 1;
     });
     _clearFlashLater();
+    await _notifyChanged();
   }
 
   Future<void> _editRep(ExerciseSet set, int repIndex) async {
@@ -113,11 +119,16 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
 
     final setIndex = workout.sets.indexOf(set);
     setState(() {
-      set.reps[repIndex] = Rep(weight: result.$1, reps: result.$2);
+      set.reps[repIndex] = Rep(
+        id: current.id,
+        weight: result.$1,
+        reps: result.$2,
+      );
       _flashSet = setIndex;
       _flashRep = repIndex;
     });
     _clearFlashLater();
+    await _notifyChanged();
   }
 
   Future<void> _editExerciseName(ExerciseSet set) async {
@@ -131,8 +142,17 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
     final setIndex = workout.sets.indexOf(set);
     if (setIndex < 0) return;
     setState(() {
-      workout.sets[setIndex] = ExerciseSet(exercise: trimmed, reps: set.reps);
+      workout.sets[setIndex] = ExerciseSet(
+        id: set.id,
+        exercise: trimmed,
+        reps: set.reps,
+      );
     });
+    await _notifyChanged();
+  }
+
+  Future<void> _notifyChanged() async {
+    await widget.onChanged?.call(workout);
   }
 
   void _clearFlashLater() {
