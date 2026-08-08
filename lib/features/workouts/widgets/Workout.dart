@@ -13,37 +13,59 @@ class WorkoutWidget extends StatefulWidget {
 }
 
 class _WorkoutWidgetState extends State<WorkoutWidget> {
-  static const _rowH = 48.0;
-  static const _nameW = 110.0;
   static const _visibleCols = 5;
-  static const _fadeW = 24.0;
-
-  final _hScroll = ScrollController();
+  static const _addW = 40.0;
 
   Workout get workout => widget.workout;
 
+  final _ctrls = <ScrollController>[];
+  bool _syncing = false;
+
   int? _flashSet;
   int? _flashRep;
-  int? _scrollToCol;
+  int? _focusCol;
   bool _showLeftFade = false;
   bool _showRightFade = false;
 
   @override
-  void initState() {
-    super.initState();
-    _hScroll.addListener(_updateFades);
-  }
-
-  @override
   void dispose() {
-    _hScroll.removeListener(_updateFades);
-    _hScroll.dispose();
+    for (final c in _ctrls) {
+      c.dispose();
+    }
     super.dispose();
   }
 
-  void _updateFades() {
-    if (!_hScroll.hasClients) return;
-    final pos = _hScroll.position;
+  void _ensureControllers(int n) {
+    while (_ctrls.length < n) {
+      final i = _ctrls.length;
+      final c = ScrollController();
+      c.addListener(() => _onScroll(i));
+      _ctrls.add(c);
+    }
+    while (_ctrls.length > n) {
+      _ctrls.removeLast().dispose();
+    }
+  }
+
+  void _onScroll(int source) {
+    if (_syncing || !_ctrls[source].hasClients) return;
+    _syncing = true;
+    final offset = _ctrls[source].offset;
+    for (var i = 0; i < _ctrls.length; i++) {
+      if (i == source || !_ctrls[i].hasClients) continue;
+      final max = _ctrls[i].position.maxScrollExtent;
+      final target = offset.clamp(0.0, max);
+      if ((_ctrls[i].offset - target).abs() > 0.5) {
+        _ctrls[i].jumpTo(target);
+      }
+    }
+    _syncing = false;
+    _updateFades(source);
+  }
+
+  void _updateFades(int from) {
+    if (!_ctrls[from].hasClients) return;
+    final pos = _ctrls[from].position;
     final left = pos.pixels > 0.5;
     final right = pos.maxScrollExtent > 0.5 &&
         pos.pixels < pos.maxScrollExtent - 0.5;
@@ -70,7 +92,7 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
       set.reps.add(Rep(weight: result.$1, reps: result.$2));
       _flashSet = setIndex;
       _flashRep = set.reps.length - 1;
-      _scrollToCol = set.reps.length - 1;
+      _focusCol = set.reps.length - 1;
     });
 
     Future<void>.delayed(const Duration(milliseconds: 900), () {
@@ -83,192 +105,202 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
   }
 
   void _scrollToAdded(double cellW, int colCount) {
-    final col = _scrollToCol;
+    final col = _focusCol;
     if (col == null) return;
-    _scrollToCol = null;
+    _focusCol = null;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_hScroll.hasClients || colCount == 0) return;
-      final max = _hScroll.position.maxScrollExtent;
+      if (_ctrls.isEmpty || !_ctrls.first.hasClients || colCount == 0) return;
+      final pos = _ctrls.first.position;
+      final max = pos.maxScrollExtent;
       if (max <= 0) return;
-      final viewport = _hScroll.position.viewportDimension;
+      final viewport = pos.viewportDimension;
       final target =
           (col * cellW - (viewport - cellW) / 2).clamp(0.0, max);
-      _hScroll.animateTo(
-        target,
-        duration: const Duration(milliseconds: 280),
-        curve: Curves.easeOut,
-      );
+      _syncing = true;
+      for (final c in _ctrls) {
+        if (!c.hasClients) continue;
+        c.animateTo(
+          target.clamp(0.0, c.position.maxScrollExtent),
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeOut,
+        );
+      }
+      _syncing = false;
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final colCount = workout.sets.fold<int>(
+    final sets = workout.sets;
+    _ensureControllers(sets.length);
+
+    final colCount = sets.fold<int>(
       0,
       (max, set) => set.reps.length > max ? set.reps.length : max,
     );
-    final rows = workout.sets.length + 1;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final setsWidth = constraints.maxWidth - 32 - _addW; // padding + add
+        final slots = colCount == 0
+            ? 1
+            : (colCount <= _visibleCols ? colCount : _visibleCols);
+        final cellW = setsWidth / slots;
+        _scrollToAdded(cellW, colCount);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_ctrls.isNotEmpty) _updateFades(0);
+        });
+
+        return ListView.separated(
+          padding: const EdgeInsets.all(16),
+          itemCount: sets.length,
+          separatorBuilder: (_, _) => const SizedBox(height: 16),
+          itemBuilder: (context, i) {
+            return _ExerciseBlock(
+              set: sets[i],
+              colCount: colCount,
+              cellW: cellW,
+              controller: _ctrls[i],
+              flashRep: _flashSet == i ? _flashRep : null,
+              showLeftFade: _showLeftFade,
+              showRightFade: _showRightFade,
+              onAdd: () => _addRep(sets[i]),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class _ExerciseBlock extends StatelessWidget {
+  static const _rowH = 40.0;
+  static const _fadeW = 24.0;
+
+  final ExerciseSet set;
+  final int colCount;
+  final double cellW;
+  final ScrollController controller;
+  final int? flashRep;
+  final bool showLeftFade;
+  final bool showRightFade;
+  final VoidCallback onAdd;
+
+  const _ExerciseBlock({
+    required this.set,
+    required this.colCount,
+    required this.cellW,
+    required this.controller,
+    required this.flashRep,
+    required this.showLeftFade,
+    required this.showRightFade,
+    required this.onAdd,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final surface = scheme.surface;
 
-    Widget nameCell(int i) {
-      final header = i == 0;
-      return SizedBox(
-        height: _rowH,
-        width: _nameW,
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: Text(
-            header ? 'name' : workout.sets[i - 1].exercise,
-            style: header ? const TextStyle(fontWeight: FontWeight.bold) : null,
-            overflow: TextOverflow.ellipsis,
-          ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          set.exercise,
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
-      );
-    }
-
-    Widget setCells(int i, double cellW) {
-      final header = i == 0;
-      final set = header ? null : workout.sets[i - 1];
-      final style =
-          header ? const TextStyle(fontWeight: FontWeight.bold) : null;
-      return SizedBox(
-        height: _rowH,
-        child: Row(
+        const SizedBox(height: 4),
+        Row(
           children: [
-            for (var c = 0; c < colCount; c++)
-              SizedBox(
-                width: cellW,
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 250),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 4,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: !header &&
-                              _flashSet == i - 1 &&
-                              _flashRep == c
-                          ? scheme.primaryContainer
-                          : null,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      header
-                          ? 'w/rep'
-                          : c < set!.reps.length
-                              ? '${set.reps[c].weight}*${set.reps[c].reps}'
-                              : '',
-                      style: style,
+            Expanded(
+              child: Stack(
+                children: [
+                  SingleChildScrollView(
+                    controller: controller,
+                    scrollDirection: Axis.horizontal,
+                    child: SizedBox(
+                      height: _rowH,
+                      child: Row(
+                        children: [
+                          for (var c = 0; c < colCount; c++)
+                            SizedBox(
+                              width: cellW,
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 250),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 4,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: flashRep == c
+                                        ? scheme.primaryContainer
+                                        : null,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    c < set.reps.length
+                                        ? '${set.reps[c].weight}'
+                                            '*${set.reps[c].reps}'
+                                        : '',
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ),
-          ],
-        ),
-      );
-    }
-
-    Widget addCell(int i) {
-      if (i == 0) return const SizedBox(height: _rowH, width: 40);
-      final set = workout.sets[i - 1];
-      return SizedBox(
-        height: _rowH,
-        width: 40,
-        child: IconButton(
-          icon: const Icon(Icons.add, size: 20),
-          onPressed: () => _addRep(set),
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(),
-        ),
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: SingleChildScrollView(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Column(children: [for (var i = 0; i < rows; i++) nameCell(i)]),
-            Expanded(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final slots =
-                      colCount == 0
-                          ? 1
-                          : (colCount <= _visibleCols
-                              ? colCount
-                              : _visibleCols);
-                  final cellW = constraints.maxWidth / slots;
-                  _scrollToAdded(cellW, colCount);
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    _updateFades();
-                  });
-
-                  final surface = Theme.of(context).colorScheme.surface;
-                  return Stack(
-                    children: [
-                      SingleChildScrollView(
-                        controller: _hScroll,
-                        scrollDirection: Axis.horizontal,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            for (var i = 0; i < rows; i++)
-                              setCells(i, cellW),
-                          ],
+                  if (showLeftFade)
+                    Positioned(
+                      left: 0,
+                      top: 0,
+                      bottom: 0,
+                      width: _fadeW,
+                      child: IgnorePointer(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [surface, surface.withValues(alpha: 0)],
+                            ),
+                          ),
                         ),
                       ),
-                      if (_showLeftFade)
-                        Positioned(
-                          left: 0,
-                          top: 0,
-                          bottom: 0,
-                          width: _fadeW,
-                          child: IgnorePointer(
-                            child: DecoratedBox(
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    surface,
-                                    surface.withValues(alpha: 0),
-                                  ],
-                                ),
-                              ),
+                    ),
+                  if (showRightFade)
+                    Positioned(
+                      right: 0,
+                      top: 0,
+                      bottom: 0,
+                      width: _fadeW,
+                      child: IgnorePointer(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [surface.withValues(alpha: 0), surface],
                             ),
                           ),
                         ),
-                      if (_showRightFade)
-                        Positioned(
-                          right: 0,
-                          top: 0,
-                          bottom: 0,
-                          width: _fadeW,
-                          child: IgnorePointer(
-                            child: DecoratedBox(
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    surface.withValues(alpha: 0),
-                                    surface,
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  );
-                },
+                      ),
+                    ),
+                ],
               ),
             ),
-            Column(children: [for (var i = 0; i < rows; i++) addCell(i)]),
+            SizedBox(
+              width: 40,
+              height: _rowH,
+              child: IconButton(
+                icon: const Icon(Icons.add, size: 20),
+                onPressed: onAdd,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+            ),
           ],
         ),
-      ),
+      ],
     );
   }
 }
