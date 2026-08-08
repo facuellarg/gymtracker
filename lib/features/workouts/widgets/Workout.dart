@@ -120,6 +120,24 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
     _clearFlashLater();
   }
 
+  Future<void> _editExerciseName(ExerciseSet set) async {
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => _EditNameDialog(initialName: set.exercise),
+    );
+    final trimmed = name?.trim() ?? '';
+    if (trimmed.isEmpty || !mounted) return;
+
+    final setIndex = workout.sets.indexOf(set);
+    if (setIndex < 0) return;
+    setState(() {
+      workout.sets[setIndex] = ExerciseSet(
+        exercise: trimmed,
+        reps: set.reps,
+      );
+    });
+  }
+
   void _clearFlashLater() {
     Future<void>.delayed(const Duration(milliseconds: 900), () {
       if (!mounted) return;
@@ -193,6 +211,7 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
               showRightFade: _showRightFade,
               onAdd: () => _addRep(sets[i]),
               onEdit: (repIndex) => _editRep(sets[i], repIndex),
+              onEditName: () => _editExerciseName(sets[i]),
             );
           },
         );
@@ -214,6 +233,7 @@ class _ExerciseBlock extends StatelessWidget {
   final bool showRightFade;
   final VoidCallback onAdd;
   final ValueChanged<int> onEdit;
+  final VoidCallback onEditName;
 
   const _ExerciseBlock({
     required this.set,
@@ -225,6 +245,7 @@ class _ExerciseBlock extends StatelessWidget {
     required this.showRightFade,
     required this.onAdd,
     required this.onEdit,
+    required this.onEditName,
   });
 
   @override
@@ -235,9 +256,16 @@ class _ExerciseBlock extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          set.exercise,
-          style: const TextStyle(fontWeight: FontWeight.bold),
+        InkWell(
+          onTap: onEditName,
+          borderRadius: BorderRadius.circular(4),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Text(
+              set.exercise,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
         ),
         const SizedBox(height: 2),
         Divider(
@@ -435,6 +463,49 @@ class _RepDialogState extends State<_RepDialog> {
           onPressed: _submit,
           child: Text(widget.actionLabel),
         ),
+      ],
+    );
+  }
+}
+
+class _EditNameDialog extends StatefulWidget {
+  final String initialName;
+
+  const _EditNameDialog({required this.initialName});
+
+  @override
+  State<_EditNameDialog> createState() => _EditNameDialogState();
+}
+
+class _EditNameDialogState extends State<_EditNameDialog> {
+  late final _nameCtrl = TextEditingController(text: widget.initialName);
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    super.dispose();
+  }
+
+  void _submit() => Navigator.pop(context, _nameCtrl.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      scrollable: true,
+      title: const Text('Edit exercise'),
+      content: TextField(
+        controller: _nameCtrl,
+        decoration: const InputDecoration(labelText: 'exercise'),
+        autofocus: true,
+        textCapitalization: TextCapitalization.sentences,
+        onSubmitted: (_) => _submit(),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('cancel'),
+        ),
+        TextButton(onPressed: _submit, child: const Text('save')),
       ],
     );
   }

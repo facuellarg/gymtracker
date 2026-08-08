@@ -52,6 +52,19 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     return '${date.month}/${date.day}';
   }
 
+  Future<void> _editWorkoutName() async {
+    final dateLabel = _titleFor(workout.date);
+    final initial =
+        workout.name.trim().isEmpty ? dateLabel : workout.name.trim();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => _EditWorkoutNameDialog(initialName: initial),
+    );
+    final trimmed = name?.trim() ?? '';
+    if (trimmed.isEmpty || !mounted) return;
+    setState(() => workout.name = trimmed);
+  }
+
   Future<void> _addExercise() async {
     final name = await showDialog<String>(
       context: context,
@@ -66,14 +79,35 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final dateLabel = _titleFor(workout.date);
+    final name = workout.name.trim();
+    final hasCustomName = name.isNotEmpty && name != dateLabel;
+    final theme = Theme.of(context).textTheme;
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(_titleFor(workout.date)),
+        title: hasCustomName
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(name, style: theme.titleLarge),
+                  Text(dateLabel, style: theme.labelMedium),
+                ],
+              )
+            : Text(dateLabel),
         actions: [
           IconButton(
             icon: const Icon(Icons.add),
             tooltip: 'Add exercise',
             onPressed: _addExercise,
+          ),
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              if (value == 'rename') _editWorkoutName();
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(value: 'rename', child: Text('Rename')),
+            ],
           ),
         ],
       ),
@@ -118,6 +152,49 @@ class _AddExerciseDialogState extends State<_AddExerciseDialog> {
           child: const Text('cancel'),
         ),
         TextButton(onPressed: _submit, child: const Text('add')),
+      ],
+    );
+  }
+}
+
+class _EditWorkoutNameDialog extends StatefulWidget {
+  final String initialName;
+
+  const _EditWorkoutNameDialog({required this.initialName});
+
+  @override
+  State<_EditWorkoutNameDialog> createState() => _EditWorkoutNameDialogState();
+}
+
+class _EditWorkoutNameDialogState extends State<_EditWorkoutNameDialog> {
+  late final _nameCtrl = TextEditingController(text: widget.initialName);
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    super.dispose();
+  }
+
+  void _submit() => Navigator.pop(context, _nameCtrl.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      scrollable: true,
+      title: const Text('Edit workout'),
+      content: TextField(
+        controller: _nameCtrl,
+        decoration: const InputDecoration(labelText: 'name'),
+        autofocus: true,
+        textCapitalization: TextCapitalization.sentences,
+        onSubmitted: (_) => _submit(),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('cancel'),
+        ),
+        TextButton(onPressed: _submit, child: const Text('save')),
       ],
     );
   }

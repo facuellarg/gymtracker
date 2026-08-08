@@ -8,11 +8,31 @@ Think notebook or spreadsheet: the user records today's training the way they wo
 
 ## Core features (only these)
 
-1. **Log a workout** — a session for a day (the day's entry).
+1. **Log a workout** — a session for a day (the day's entry). Default home.
 2. **Log exercises** inside that workout.
 3. **For each exercise: sets, reps, and weight** (unit optional).
+4. **Review history** — past sessions by date (default list) and by exercise name (search/filter).
 
 Nothing else unless the user explicitly asks. No social, no meal tracking, no giant exercise encyclopedia, no coaching AI, no charts suite by default.
+
+## Navigation / home
+
+**Home = Log (today’s workout).** Open straight into today’s session. Do not put a chooser hub or two equal “Log / Review” tiles in front of logging.
+
+Two jobs, one shell:
+
+| Tab | Role |
+|-----|------|
+| **Log** | Today’s notebook entry (create empty session if none). Primary. |
+| **History** | Reverse-chronological days + search by exercise name. Secondary. |
+
+Use a **2-item bottom nav** (`Log` | `History`). Avoid dashboards, stats strips, calendar-only homes, or separate top-level “by date” vs “by name” tabs — one history list + one search box covers both.
+
+History behavior:
+
+- Default: list sessions newest-first; one-line preview (exercise names or count).
+- Search: filter sessions that contain the typed exercise name (user-grown names only).
+- Tap a day → same workout table UI for that session.
 
 ## Data model: grow from what the user types
 
@@ -75,6 +95,9 @@ lib/
 │
 ├── features/
 │   │
+│   ├── home/
+│   │   └── screens/
+│   │
 │   ├── workouts/
 │   │   ├── models/
 │   │   ├── repository/
@@ -85,6 +108,7 @@ lib/
 │   ├── exercises/
 │   │
 │   ├── history/
+│   │   └── screens/
 │   │
 │   └── settings/
 │
@@ -109,3 +133,4 @@ lib/
 - Complex periodization / program builders
 - Nutrition, bodyweight graphs, wearables, social, cloud sync as defaults
 - Heavy onboarding or multi-step wizards for basic logging
+- Dashboard / marketing-style home with action tiles instead of Log-first
