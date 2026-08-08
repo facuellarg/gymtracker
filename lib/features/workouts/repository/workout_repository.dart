@@ -25,7 +25,8 @@ class WorkoutRepository {
     );
   }
 
-  Future<Workout> getOrCreateToday() async {
+  /// Returns today's workout and whether it was newly inserted.
+  Future<({Workout workout, bool created})> getOrCreateToday() async {
     final today = DateTime.now();
     final key = dateKey(today);
     final existing = await db.query(
@@ -35,13 +36,19 @@ class WorkoutRepository {
       limit: 1,
     );
     if (existing.isNotEmpty) {
-      return _loadWorkout(existing.first);
+      return (
+        workout: await _loadWorkout(existing.first),
+        created: false,
+      );
     }
     final id = await db.insert('workouts', {
       'name': 'Today',
       'date': key,
     });
-    return Workout(id: id, name: 'Today', date: today, sets: []);
+    return (
+      workout: Workout(id: id, name: 'Today', date: today, sets: []),
+      created: true,
+    );
   }
 
   Future<List<Workout>> getAll() async {

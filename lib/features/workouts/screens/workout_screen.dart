@@ -25,12 +25,17 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
 
   Future<void> _load() async {
     try {
-      final w = await widget.repository.getOrCreateToday();
+      final result = await widget.repository.getOrCreateToday();
       if (!mounted) return;
       setState(() {
-        _workout = w;
+        _workout = result.workout;
         _loadError = null;
       });
+      if (result.created) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _editWorkoutName();
+        });
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() => _loadError = e);
@@ -105,6 +110,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     final name = workout.name.trim();
     final hasCustomName = name.isNotEmpty && name != dateLabel;
     final theme = Theme.of(context).textTheme;
+    final empty = workout.sets.isEmpty;
 
     return Scaffold(
       appBar: AppBar(
@@ -133,10 +139,48 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
           ),
         ],
       ),
-      body: WorkoutWidget(
-        workout: workout,
-        onChanged: (w) => widget.repository.saveWorkout(w),
-        loadExerciseNames: widget.repository.distinctExerciseNames,
+      body: empty
+          ? _EmptyWorkoutBody(
+              onNameSession: _editWorkoutName,
+              onAddExercise: _addExercise,
+            )
+          : WorkoutWidget(
+              workout: workout,
+              onChanged: (w) => widget.repository.saveWorkout(w),
+              loadExerciseNames: widget.repository.distinctExerciseNames,
+            ),
+    );
+  }
+}
+
+class _EmptyWorkoutBody extends StatelessWidget {
+  final VoidCallback onNameSession;
+  final VoidCallback onAddExercise;
+
+  const _EmptyWorkoutBody({
+    required this.onNameSession,
+    required this.onAddExercise,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextButton(
+              onPressed: onNameSession,
+              child: const Text('Name this session'),
+            ),
+            const SizedBox(height: 8),
+            FilledButton(
+              onPressed: onAddExercise,
+              child: const Text('Add exercise'),
+            ),
+          ],
+        ),
       ),
     );
   }
