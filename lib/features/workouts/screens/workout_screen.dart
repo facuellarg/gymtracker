@@ -72,9 +72,11 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
   Future<void> _addExercise() async {
     final workout = _workout;
     if (workout == null) return;
+    final suggestions = await widget.repository.distinctExerciseNames();
+    if (!mounted) return;
     final name = await showDialog<String>(
       context: context,
-      builder: (context) => const _AddExerciseDialog(),
+      builder: (context) => _AddExerciseDialog(suggestions: suggestions),
     );
     final trimmed = name?.trim() ?? '';
     if (trimmed.isEmpty || !mounted) return;
@@ -134,40 +136,56 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
       body: WorkoutWidget(
         workout: workout,
         onChanged: (w) => widget.repository.saveWorkout(w),
+        loadExerciseNames: widget.repository.distinctExerciseNames,
       ),
     );
   }
 }
 
 class _AddExerciseDialog extends StatefulWidget {
-  const _AddExerciseDialog();
+  final List<String> suggestions;
+
+  const _AddExerciseDialog({required this.suggestions});
 
   @override
   State<_AddExerciseDialog> createState() => _AddExerciseDialogState();
 }
 
 class _AddExerciseDialogState extends State<_AddExerciseDialog> {
-  final _nameCtrl = TextEditingController();
+  TextEditingController? _fieldCtrl;
 
-  @override
-  void dispose() {
-    _nameCtrl.dispose();
-    super.dispose();
+  void _submit() {
+    final text = _fieldCtrl?.text ?? '';
+    Navigator.pop(context, text);
   }
-
-  void _submit() => Navigator.pop(context, _nameCtrl.text);
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      scrollable: true,
       title: const Text('Add exercise'),
-      content: TextField(
-        controller: _nameCtrl,
-        decoration: const InputDecoration(labelText: 'exercise'),
-        autofocus: true,
-        textCapitalization: TextCapitalization.sentences,
-        onSubmitted: (_) => _submit(),
+      content: Autocomplete<String>(
+        optionsBuilder: (value) {
+          final q = value.text.trim().toLowerCase();
+          if (q.isEmpty || widget.suggestions.isEmpty) {
+            return const Iterable<String>.empty();
+          }
+          return widget.suggestions
+              .where((s) => s.toLowerCase().contains(q))
+              .take(8);
+        },
+        onSelected: (selection) => Navigator.pop(context, selection),
+        fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+          _fieldCtrl = controller;
+          return TextField(
+            controller: controller,
+            focusNode: focusNode,
+            decoration: const InputDecoration(labelText: 'exercise'),
+            autofocus: true,
+            textCapitalization: TextCapitalization.sentences,
+            onSubmitted: (_) => _submit(),
+          );
+        },
+        optionsMaxHeight: 200,
       ),
       actions: [
         TextButton(

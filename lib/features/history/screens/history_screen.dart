@@ -72,6 +72,7 @@ class HistoryScreenState extends State<HistoryScreen> {
           body: WorkoutWidget(
             workout: workout,
             onChanged: (w) => widget.repository.saveWorkout(w),
+            loadExerciseNames: widget.repository.distinctExerciseNames,
           ),
         ),
       ),

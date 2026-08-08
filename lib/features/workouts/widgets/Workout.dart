@@ -6,11 +6,13 @@ import 'package:gymtracker/features/workouts/models/workouts.dart';
 class WorkoutWidget extends StatefulWidget {
   final Workout workout;
   final Future<void> Function(Workout workout)? onChanged;
+  final Future<List<String>> Function()? loadExerciseNames;
 
   const WorkoutWidget({
     super.key,
     required this.workout,
     this.onChanged,
+    this.loadExerciseNames,
   });
 
   @override
@@ -132,9 +134,15 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
   }
 
   Future<void> _editExerciseName(ExerciseSet set) async {
+    final suggestions =
+        await widget.loadExerciseNames?.call() ?? const <String>[];
+    if (!mounted) return;
     final name = await showDialog<String>(
       context: context,
-      builder: (context) => _EditNameDialog(initialName: set.exercise),
+      builder: (context) => _EditNameDialog(
+        initialName: set.exercise,
+        suggestions: suggestions,
+      ),
     );
     final trimmed = name?.trim() ?? '';
     if (trimmed.isEmpty || !mounted) return;
@@ -484,35 +492,53 @@ class _RepDialogState extends State<_RepDialog> {
 
 class _EditNameDialog extends StatefulWidget {
   final String initialName;
+  final List<String> suggestions;
 
-  const _EditNameDialog({required this.initialName});
+  const _EditNameDialog({
+    required this.initialName,
+    required this.suggestions,
+  });
 
   @override
   State<_EditNameDialog> createState() => _EditNameDialogState();
 }
 
 class _EditNameDialogState extends State<_EditNameDialog> {
-  late final _nameCtrl = TextEditingController(text: widget.initialName);
+  TextEditingController? _fieldCtrl;
 
-  @override
-  void dispose() {
-    _nameCtrl.dispose();
-    super.dispose();
+  void _submit() {
+    final text = _fieldCtrl?.text ?? widget.initialName;
+    Navigator.pop(context, text);
   }
-
-  void _submit() => Navigator.pop(context, _nameCtrl.text);
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      scrollable: true,
       title: const Text('Edit exercise'),
-      content: TextField(
-        controller: _nameCtrl,
-        decoration: const InputDecoration(labelText: 'exercise'),
-        autofocus: true,
-        textCapitalization: TextCapitalization.sentences,
-        onSubmitted: (_) => _submit(),
+      content: Autocomplete<String>(
+        initialValue: TextEditingValue(text: widget.initialName),
+        optionsBuilder: (value) {
+          final q = value.text.trim().toLowerCase();
+          if (q.isEmpty || widget.suggestions.isEmpty) {
+            return const Iterable<String>.empty();
+          }
+          return widget.suggestions
+              .where((s) => s.toLowerCase().contains(q))
+              .take(8);
+        },
+        onSelected: (selection) => Navigator.pop(context, selection),
+        fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+          _fieldCtrl = controller;
+          return TextField(
+            controller: controller,
+            focusNode: focusNode,
+            decoration: const InputDecoration(labelText: 'exercise'),
+            autofocus: true,
+            textCapitalization: TextCapitalization.sentences,
+            onSubmitted: (_) => _submit(),
+          );
+        },
+        optionsMaxHeight: 200,
       ),
       actions: [
         TextButton(

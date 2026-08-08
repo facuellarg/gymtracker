@@ -64,6 +64,15 @@ class WorkoutRepository {
     return _loadWorkout(rows.first);
   }
 
+  /// Distinct exercise names the user has logged (for autocomplete).
+  Future<List<String>> distinctExerciseNames() async {
+    final rows = await db.rawQuery(
+      'SELECT DISTINCT exercise FROM exercise_sets '
+      'ORDER BY exercise COLLATE NOCASE ASC',
+    );
+    return [for (final r in rows) r['exercise'] as String];
+  }
+
   /// Upsert workout row; replace all exercise_sets/reps for that workout.
   Future<void> saveWorkout(Workout w) async {
     await db.transaction((txn) async {
