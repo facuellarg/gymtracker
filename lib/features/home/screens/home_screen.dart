@@ -23,7 +23,11 @@ class _HomeScreenState extends State<HomeScreen> {
         index: _tab,
         children: [
           WorkoutScreen(repository: widget.repository),
-          HistoryScreen(key: _historyKey, repository: widget.repository),
+          HistoryScreen(
+            key: _historyKey,
+            repository: widget.repository,
+            onOpenToday: () => setState(() => _tab = 0),
+          ),
         ],
       ),
       bottomNavigationBar: NavigationBar(

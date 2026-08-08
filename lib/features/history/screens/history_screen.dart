@@ -5,8 +5,13 @@ import 'package:gymtracker/features/workouts/widgets/Workout.dart';
 
 class HistoryScreen extends StatefulWidget {
   final WorkoutRepository repository;
+  final VoidCallback onOpenToday;
 
-  const HistoryScreen({super.key, required this.repository});
+  const HistoryScreen({
+    super.key,
+    required this.repository,
+    required this.onOpenToday,
+  });
 
   @override
   State<HistoryScreen> createState() => HistoryScreenState();
@@ -39,13 +44,15 @@ class HistoryScreenState extends State<HistoryScreen> {
     });
   }
 
-  String _dateLabel(DateTime date) {
+  bool _isToday(DateTime date) {
     final now = DateTime.now();
-    if (date.year == now.year &&
+    return date.year == now.year &&
         date.month == now.month &&
-        date.day == now.day) {
-      return 'Today';
-    }
+        date.day == now.day;
+  }
+
+  String _dateLabel(DateTime date) {
+    if (_isToday(date)) return 'Today';
     return '${date.month}/${date.day}/${date.year}';
   }
 
@@ -65,20 +72,34 @@ class HistoryScreenState extends State<HistoryScreen> {
   }
 
   void _openSession(Workout workout) {
+    if (_isToday(workout.date)) {
+      widget.onOpenToday();
+      return;
+    }
+
+    final dateLabel = _dateLabel(workout.date);
+    final name = workout.name.trim();
+    final hasCustomName = name.isNotEmpty && name != dateLabel;
+    final theme = Theme.of(context).textTheme;
+
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (context) => Scaffold(
-          appBar: AppBar(title: Text(_dateLabel(workout.date))),
-          body: WorkoutWidget(
-            workout: workout,
-            onChanged: (w) => widget.repository.saveWorkout(w),
-            loadExerciseNames: widget.repository.distinctExerciseNames,
+          appBar: AppBar(
+            title: hasCustomName
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(name, style: theme.titleLarge),
+                      Text(dateLabel, style: theme.labelMedium),
+                    ],
+                  )
+                : Text(dateLabel),
           ),
+          body: WorkoutWidget(workout: workout, readOnly: true),
         ),
       ),
-    ).then((_) {
-      if (mounted) reload();
-    });
+    );
   }
 
   @override
@@ -117,6 +138,7 @@ class HistoryScreenState extends State<HistoryScreen> {
                           final hasCustomName =
                               name.isNotEmpty && name != dateLabel;
                           final textTheme = Theme.of(context).textTheme;
+                          final isToday = _isToday(w.date);
 
                           return ListTile(
                             title: hasCustomName
@@ -141,10 +163,15 @@ class HistoryScreenState extends State<HistoryScreen> {
                                     style: textTheme.titleMedium,
                                   ),
                             subtitle: Text(
-                              _preview(w),
+                              isToday
+                                  ? 'Continue in Log'
+                                  : _preview(w),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
+                            trailing: isToday
+                                ? const Icon(Icons.edit_note)
+                                : null,
                             onTap: () => _openSession(w),
                           );
                         },

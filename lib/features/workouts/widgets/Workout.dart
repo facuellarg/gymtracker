@@ -7,12 +7,14 @@ class WorkoutWidget extends StatefulWidget {
   final Workout workout;
   final Future<void> Function(Workout workout)? onChanged;
   final Future<List<String>> Function()? loadExerciseNames;
+  final bool readOnly;
 
   const WorkoutWidget({
     super.key,
     required this.workout,
     this.onChanged,
     this.loadExerciseNames,
+    this.readOnly = false,
   });
 
   @override
@@ -84,6 +86,7 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
   }
 
   Future<void> _addRep(ExerciseSet set) async {
+    if (widget.readOnly) return;
     final result = await showDialog<(int, int)>(
       context: context,
       builder: (context) => _RepDialog(
@@ -107,6 +110,7 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
   }
 
   Future<void> _editRep(ExerciseSet set, int repIndex) async {
+    if (widget.readOnly) return;
     final current = set.reps[repIndex];
     final result = await showDialog<(int, int)>(
       context: context,
@@ -134,6 +138,7 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
   }
 
   Future<void> _editExerciseName(ExerciseSet set) async {
+    if (widget.readOnly) return;
     final suggestions =
         await widget.loadExerciseNames?.call() ?? const <String>[];
     if (!mounted) return;
@@ -210,7 +215,8 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final setsWidth = constraints.maxWidth - 32 - _addW; // padding + add
+        final addW = widget.readOnly ? 0.0 : _addW;
+        final setsWidth = constraints.maxWidth - 32 - addW;
         final slots = colCount == 0
             ? 1
             : (colCount <= _visibleCols ? colCount : _visibleCols);
@@ -233,6 +239,7 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
               flashRep: _flashSet == i ? _flashRep : null,
               showLeftFade: _showLeftFade,
               showRightFade: _showRightFade,
+              readOnly: widget.readOnly,
               onAdd: () => _addRep(sets[i]),
               onEdit: (repIndex) => _editRep(sets[i], repIndex),
               onEditName: () => _editExerciseName(sets[i]),
@@ -255,6 +262,7 @@ class _ExerciseBlock extends StatelessWidget {
   final int? flashRep;
   final bool showLeftFade;
   final bool showRightFade;
+  final bool readOnly;
   final VoidCallback onAdd;
   final ValueChanged<int> onEdit;
   final VoidCallback onEditName;
@@ -267,6 +275,7 @@ class _ExerciseBlock extends StatelessWidget {
     required this.flashRep,
     required this.showLeftFade,
     required this.showRightFade,
+    required this.readOnly,
     required this.onAdd,
     required this.onEdit,
     required this.onEditName,
@@ -277,20 +286,25 @@ class _ExerciseBlock extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final surface = scheme.surface;
 
+    final nameText = Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Text(
+        set.exercise,
+        style: const TextStyle(fontWeight: FontWeight.bold),
+      ),
+    );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        InkWell(
-          onTap: onEditName,
-          borderRadius: BorderRadius.circular(4),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2),
-            child: Text(
-              set.exercise,
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
+        if (readOnly)
+          nameText
+        else
+          InkWell(
+            onTap: onEditName,
+            borderRadius: BorderRadius.circular(4),
+            child: nameText,
           ),
-        ),
         const SizedBox(height: 2),
         Divider(
           height: 1,
@@ -327,35 +341,9 @@ class _ExerciseBlock extends StatelessWidget {
                                                 .withValues(alpha: 0.5),
                                           ),
                                         Expanded(
-                                          child: InkWell(
-                                            onTap: () => onEdit(c),
-                                            borderRadius: BorderRadius.circular(
-                                              4,
-                                            ),
-                                            child: Align(
-                                              alignment: Alignment.centerLeft,
-                                              child: AnimatedContainer(
-                                                duration: const Duration(
-                                                  milliseconds: 250,
-                                                ),
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      horizontal: 4,
-                                                      vertical: 2,
-                                                    ),
-                                                decoration: BoxDecoration(
-                                                  color: flashRep == c
-                                                      ? scheme.primaryContainer
-                                                      : null,
-                                                  borderRadius:
-                                                      BorderRadius.circular(4),
-                                                ),
-                                                child: Text(
-                                                  '${set.reps[c].weight}'
-                                                  '*${set.reps[c].reps}',
-                                                ),
-                                              ),
-                                            ),
+                                          child: _repCell(
+                                            scheme: scheme,
+                                            index: c,
                                           ),
                                         ),
                                       ],
@@ -401,19 +389,43 @@ class _ExerciseBlock extends StatelessWidget {
                 ],
               ),
             ),
-            SizedBox(
-              width: 40,
-              height: _rowH,
-              child: IconButton(
-                icon: const Icon(Icons.add, size: 20),
-                onPressed: onAdd,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
+            if (!readOnly)
+              SizedBox(
+                width: 40,
+                height: _rowH,
+                child: IconButton(
+                  icon: const Icon(Icons.add, size: 20),
+                  onPressed: onAdd,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
               ),
-            ),
           ],
         ),
       ],
+    );
+  }
+
+  Widget _repCell({required ColorScheme scheme, required int index}) {
+    final child = Align(
+      alignment: Alignment.centerLeft,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        decoration: BoxDecoration(
+          color: flashRep == index ? scheme.primaryContainer : null,
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Text(
+          '${set.reps[index].weight}*${set.reps[index].reps}',
+        ),
+      ),
+    );
+    if (readOnly) return child;
+    return InkWell(
+      onTap: () => onEdit(index),
+      borderRadius: BorderRadius.circular(4),
+      child: child,
     );
   }
 }
