@@ -79,8 +79,9 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
   Future<void> _addRep(ExerciseSet set) async {
     final result = await showDialog<(int, int)>(
       context: context,
-      builder: (context) => _AddRepDialog(
+      builder: (context) => _RepDialog(
         title: set.exercise,
+        actionLabel: 'add',
         initialWeight: set.reps.isEmpty ? null : set.reps.last.weight,
         initialReps: set.reps.isEmpty ? null : set.reps.last.reps,
       ),
@@ -94,7 +95,32 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
       _flashRep = set.reps.length - 1;
       _focusCol = set.reps.length - 1;
     });
+    _clearFlashLater();
+  }
 
+  Future<void> _editRep(ExerciseSet set, int repIndex) async {
+    final current = set.reps[repIndex];
+    final result = await showDialog<(int, int)>(
+      context: context,
+      builder: (context) => _RepDialog(
+        title: set.exercise,
+        actionLabel: 'save',
+        initialWeight: current.weight,
+        initialReps: current.reps,
+      ),
+    );
+    if (result == null || !mounted) return;
+
+    final setIndex = workout.sets.indexOf(set);
+    setState(() {
+      set.reps[repIndex] = Rep(weight: result.$1, reps: result.$2);
+      _flashSet = setIndex;
+      _flashRep = repIndex;
+    });
+    _clearFlashLater();
+  }
+
+  void _clearFlashLater() {
     Future<void>.delayed(const Duration(milliseconds: 900), () {
       if (!mounted) return;
       setState(() {
@@ -166,6 +192,7 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
               showLeftFade: _showLeftFade,
               showRightFade: _showRightFade,
               onAdd: () => _addRep(sets[i]),
+              onEdit: (repIndex) => _editRep(sets[i], repIndex),
             );
           },
         );
@@ -186,6 +213,7 @@ class _ExerciseBlock extends StatelessWidget {
   final bool showLeftFade;
   final bool showRightFade;
   final VoidCallback onAdd;
+  final ValueChanged<int> onEdit;
 
   const _ExerciseBlock({
     required this.set,
@@ -196,6 +224,7 @@ class _ExerciseBlock extends StatelessWidget {
     required this.showLeftFade,
     required this.showRightFade,
     required this.onAdd,
+    required this.onEdit,
   });
 
   @override
@@ -209,6 +238,12 @@ class _ExerciseBlock extends StatelessWidget {
         Text(
           set.exercise,
           style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 2),
+        Divider(
+          height: 1,
+          thickness: 1,
+          color: scheme.outlineVariant.withValues(alpha: 0.5),
         ),
         const SizedBox(height: 4),
         Row(
@@ -226,28 +261,53 @@ class _ExerciseBlock extends StatelessWidget {
                           for (var c = 0; c < colCount; c++)
                             SizedBox(
                               width: cellW,
-                              child: Align(
-                                alignment: Alignment.centerLeft,
-                                child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 250),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 4,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: flashRep == c
-                                        ? scheme.primaryContainer
-                                        : null,
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    c < set.reps.length
-                                        ? '${set.reps[c].weight}'
-                                            '*${set.reps[c].reps}'
-                                        : '',
-                                  ),
-                                ),
-                              ),
+                              child: c < set.reps.length
+                                  ? Row(
+                                      children: [
+                                        if (c > 0)
+                                          Container(
+                                            width: 1,
+                                            height: 18,
+                                            margin: const EdgeInsets.only(
+                                              right: 6,
+                                            ),
+                                            color: scheme.outlineVariant
+                                                .withValues(alpha: 0.5),
+                                          ),
+                                        Expanded(
+                                          child: InkWell(
+                                            onTap: () => onEdit(c),
+                                            borderRadius:
+                                                BorderRadius.circular(4),
+                                            child: Align(
+                                              alignment: Alignment.centerLeft,
+                                              child: AnimatedContainer(
+                                                duration: const Duration(
+                                                  milliseconds: 250,
+                                                ),
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 4,
+                                                  vertical: 2,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: flashRep == c
+                                                      ? scheme.primaryContainer
+                                                      : null,
+                                                  borderRadius:
+                                                      BorderRadius.circular(4),
+                                                ),
+                                                child: Text(
+                                                  '${set.reps[c].weight}'
+                                                  '*${set.reps[c].reps}',
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    )
+                                  : null,
                             ),
                         ],
                       ),
@@ -305,22 +365,24 @@ class _ExerciseBlock extends StatelessWidget {
   }
 }
 
-class _AddRepDialog extends StatefulWidget {
+class _RepDialog extends StatefulWidget {
   final String title;
+  final String actionLabel;
   final int? initialWeight;
   final int? initialReps;
 
-  const _AddRepDialog({
+  const _RepDialog({
     required this.title,
+    required this.actionLabel,
     this.initialWeight,
     this.initialReps,
   });
 
   @override
-  State<_AddRepDialog> createState() => _AddRepDialogState();
+  State<_RepDialog> createState() => _RepDialogState();
 }
 
-class _AddRepDialogState extends State<_AddRepDialog> {
+class _RepDialogState extends State<_RepDialog> {
   late final _weightCtrl = TextEditingController(
     text: widget.initialWeight?.toString() ?? '',
   );
@@ -369,7 +431,10 @@ class _AddRepDialogState extends State<_AddRepDialog> {
           onPressed: () => Navigator.pop(context),
           child: const Text('cancel'),
         ),
-        TextButton(onPressed: _submit, child: const Text('add')),
+        TextButton(
+          onPressed: _submit,
+          child: Text(widget.actionLabel),
+        ),
       ],
     );
   }
