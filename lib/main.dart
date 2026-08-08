@@ -14,7 +14,7 @@ class MainApp extends StatelessWidget {
   static final workout = Workout(
     name: 'Today',
     date: DateTime.now(),
-    sets: const [
+    sets: [
       ExerciseSet(
         exercise: 'bench',
         reps: [
