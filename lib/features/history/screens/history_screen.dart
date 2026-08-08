@@ -77,29 +77,19 @@ class HistoryScreenState extends State<HistoryScreen> {
       return;
     }
 
-    final dateLabel = _dateLabel(workout.date);
-    final name = workout.name.trim();
-    final hasCustomName = name.isNotEmpty && name != dateLabel;
-    final theme = Theme.of(context).textTheme;
-
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (context) => Scaffold(
-          appBar: AppBar(
-            title: hasCustomName
-                ? Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(name, style: theme.titleLarge),
-                      Text(dateLabel, style: theme.labelMedium),
-                    ],
-                  )
-                : Text(dateLabel),
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute<void>(
+            builder: (context) => _HistoryDetailPage(
+              workout: workout,
+              repository: widget.repository,
+              dateLabel: _dateLabel(workout.date),
+            ),
           ),
-          body: WorkoutWidget(workout: workout, readOnly: true),
-        ),
-      ),
-    );
+        )
+        .then((_) {
+          if (mounted) reload();
+        });
   }
 
   @override
@@ -179,6 +169,140 @@ class HistoryScreenState extends State<HistoryScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _HistoryDetailPage extends StatefulWidget {
+  final Workout workout;
+  final WorkoutRepository repository;
+  final String dateLabel;
+
+  const _HistoryDetailPage({
+    required this.workout,
+    required this.repository,
+    required this.dateLabel,
+  });
+
+  @override
+  State<_HistoryDetailPage> createState() => _HistoryDetailPageState();
+}
+
+class _HistoryDetailPageState extends State<_HistoryDetailPage> {
+  bool _editing = false;
+
+  Future<void> _rename() async {
+    final workout = widget.workout;
+    final dateLabel = widget.dateLabel;
+    final initial =
+        workout.name.trim().isEmpty ? dateLabel : workout.name.trim();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => _RenameWorkoutDialog(initialName: initial),
+    );
+    final trimmed = name?.trim() ?? '';
+    if (trimmed.isEmpty || !mounted) return;
+    setState(() => workout.name = trimmed);
+    await widget.repository.saveWorkout(workout);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final workout = widget.workout;
+    final dateLabel = widget.dateLabel;
+    final name = workout.name.trim();
+    final hasCustomName = name.isNotEmpty && name != dateLabel;
+    final theme = Theme.of(context).textTheme;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: hasCustomName
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(name, style: theme.titleLarge),
+                  Text(dateLabel, style: theme.labelMedium),
+                ],
+              )
+            : Text(dateLabel),
+        actions: [
+          if (_editing) ...[
+            PopupMenuButton<String>(
+              onSelected: (value) {
+                if (value == 'rename') _rename();
+              },
+              itemBuilder: (context) => const [
+                PopupMenuItem(value: 'rename', child: Text('Rename')),
+              ],
+            ),
+            TextButton(
+              onPressed: () => setState(() => _editing = false),
+              child: const Text('Done'),
+            ),
+          ] else
+            PopupMenuButton<String>(
+              onSelected: (value) {
+                if (value == 'edit') setState(() => _editing = true);
+              },
+              itemBuilder: (context) => const [
+                PopupMenuItem(value: 'edit', child: Text('Edit')),
+              ],
+            ),
+        ],
+      ),
+      body: WorkoutWidget(
+        workout: workout,
+        readOnly: !_editing,
+        onChanged: _editing
+            ? (w) => widget.repository.saveWorkout(w)
+            : null,
+        loadExerciseNames: _editing
+            ? widget.repository.distinctExerciseNames
+            : null,
+      ),
+    );
+  }
+}
+
+class _RenameWorkoutDialog extends StatefulWidget {
+  final String initialName;
+
+  const _RenameWorkoutDialog({required this.initialName});
+
+  @override
+  State<_RenameWorkoutDialog> createState() => _RenameWorkoutDialogState();
+}
+
+class _RenameWorkoutDialogState extends State<_RenameWorkoutDialog> {
+  late final _nameCtrl = TextEditingController(text: widget.initialName);
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    super.dispose();
+  }
+
+  void _submit() => Navigator.pop(context, _nameCtrl.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      scrollable: true,
+      title: const Text('Edit workout'),
+      content: TextField(
+        controller: _nameCtrl,
+        decoration: const InputDecoration(labelText: 'name'),
+        autofocus: true,
+        textCapitalization: TextCapitalization.sentences,
+        onSubmitted: (_) => _submit(),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('cancel'),
+        ),
+        TextButton(onPressed: _submit, child: const Text('save')),
+      ],
     );
   }
 }

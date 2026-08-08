@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:gymtracker/features/workouts/models/rep.dart';
 import 'package:gymtracker/features/workouts/models/set.dart';
 import 'package:gymtracker/features/workouts/models/workouts.dart';
@@ -24,6 +25,7 @@ class WorkoutWidget extends StatefulWidget {
 class _WorkoutWidgetState extends State<WorkoutWidget> {
   static const _visibleCols = 5;
   static const _addW = 40.0;
+  static const _tipKey = 'tip_long_press_delete';
 
   Workout get workout => widget.workout;
 
@@ -35,6 +37,36 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
   int? _focusCol;
   bool _showLeftFade = false;
   bool _showRightFade = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!widget.readOnly) _maybeShowDeleteTip();
+  }
+
+  @override
+  void didUpdateWidget(covariant WorkoutWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.readOnly && !widget.readOnly) _maybeShowDeleteTip();
+  }
+
+  Future<void> _maybeShowDeleteTip() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_tipKey) == true) return;
+    await prefs.setBool(_tipKey, true);
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Long-press a set or exercise name to delete'),
+          duration: Duration(seconds: 5),
+          showCloseIcon: true,
+        ),
+      );
+    });
+  }
 
   @override
   void dispose() {
@@ -164,6 +196,109 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
     await _notifyChanged();
   }
 
+  Future<void> _deleteRep(ExerciseSet set, int repIndex) async {
+    if (widget.readOnly) return;
+    if (repIndex < 0 || repIndex >= set.reps.length) return;
+    final rep = set.reps[repIndex];
+
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.delete_outline),
+              title: const Text('Delete set'),
+              subtitle: Text('${rep.weight}*${rep.reps}'),
+              onTap: () => Navigator.pop(context, 'delete'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (action != 'delete' || !mounted) return;
+    if (repIndex >= set.reps.length) return;
+
+    final removed = set.reps.removeAt(repIndex);
+    setState(() {});
+    await _notifyChanged();
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Set deleted'),
+        duration: const Duration(seconds: 4),
+        persist: false,
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () async {
+            set.reps.insert(repIndex, removed);
+            if (mounted) setState(() {});
+            await _notifyChanged();
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _deleteExercise(ExerciseSet set) async {
+    if (widget.readOnly) return;
+    final setIndex = workout.sets.indexOf(set);
+    if (setIndex < 0) return;
+
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.delete_outline),
+              title: const Text('Delete exercise'),
+              subtitle: Text(set.exercise),
+              onTap: () => Navigator.pop(context, 'delete'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (action != 'delete' || !mounted) return;
+    if (setIndex >= workout.sets.length || workout.sets[setIndex] != set) {
+      // list may have shifted; find again
+      final i = workout.sets.indexOf(set);
+      if (i < 0) return;
+      await _removeExerciseAt(i, set);
+      return;
+    }
+    await _removeExerciseAt(setIndex, set);
+  }
+
+  Future<void> _removeExerciseAt(int setIndex, ExerciseSet removed) async {
+    workout.sets.removeAt(setIndex);
+    setState(() {});
+    await _notifyChanged();
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('${removed.exercise} removed'),
+        duration: const Duration(seconds: 4),
+        persist: false,
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () async {
+            workout.sets.insert(setIndex, removed);
+            if (mounted) setState(() {});
+            await _notifyChanged();
+          },
+        ),
+      ),
+    );
+  }
+
   Future<void> _notifyChanged() async {
     await widget.onChanged?.call(workout);
   }
@@ -243,6 +378,8 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
               onAdd: () => _addRep(sets[i]),
               onEdit: (repIndex) => _editRep(sets[i], repIndex),
               onEditName: () => _editExerciseName(sets[i]),
+              onDeleteRep: (repIndex) => _deleteRep(sets[i], repIndex),
+              onDeleteExercise: () => _deleteExercise(sets[i]),
             );
           },
         );
@@ -266,6 +403,8 @@ class _ExerciseBlock extends StatelessWidget {
   final VoidCallback onAdd;
   final ValueChanged<int> onEdit;
   final VoidCallback onEditName;
+  final ValueChanged<int> onDeleteRep;
+  final VoidCallback onDeleteExercise;
 
   const _ExerciseBlock({
     required this.set,
@@ -279,6 +418,8 @@ class _ExerciseBlock extends StatelessWidget {
     required this.onAdd,
     required this.onEdit,
     required this.onEditName,
+    required this.onDeleteRep,
+    required this.onDeleteExercise,
   });
 
   @override
@@ -302,6 +443,7 @@ class _ExerciseBlock extends StatelessWidget {
         else
           InkWell(
             onTap: onEditName,
+            onLongPress: onDeleteExercise,
             borderRadius: BorderRadius.circular(4),
             child: nameText,
           ),
@@ -424,6 +566,7 @@ class _ExerciseBlock extends StatelessWidget {
     if (readOnly) return child;
     return InkWell(
       onTap: () => onEdit(index),
+      onLongPress: () => onDeleteRep(index),
       borderRadius: BorderRadius.circular(4),
       child: child,
     );
