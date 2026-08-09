@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:gymtracker/features/workouts/models/rep.dart';
 import 'package:gymtracker/features/workouts/models/set.dart';
 import 'package:gymtracker/features/workouts/models/workouts.dart';
+import 'package:gymtracker/l10n/app_localizations.dart';
 
 class WorkoutWidget extends StatefulWidget {
   final Workout workout;
@@ -57,11 +58,12 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
     if (!mounted) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      final l10n = AppLocalizations.of(context)!;
       ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Long-press a set or exercise name to delete'),
-          duration: Duration(seconds: 5),
+        SnackBar(
+          content: Text(l10n.deleteTip),
+          duration: const Duration(seconds: 5),
           showCloseIcon: true,
         ),
       );
@@ -119,11 +121,12 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
 
   Future<void> _addRep(ExerciseSet set) async {
     if (widget.readOnly) return;
+    final l10n = AppLocalizations.of(context)!;
     final result = await showDialog<(int, int)>(
       context: context,
       builder: (context) => _RepDialog(
         title: set.exercise,
-        actionLabel: 'add',
+        actionLabel: l10n.add,
         initialWeight: set.reps.isEmpty ? null : set.reps.last.weight,
         initialReps: set.reps.isEmpty ? null : set.reps.last.reps,
       ),
@@ -143,12 +146,13 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
 
   Future<void> _editRep(ExerciseSet set, int repIndex) async {
     if (widget.readOnly) return;
+    final l10n = AppLocalizations.of(context)!;
     final current = set.reps[repIndex];
     final result = await showDialog<(int, int)>(
       context: context,
       builder: (context) => _RepDialog(
         title: set.exercise,
-        actionLabel: 'save',
+        actionLabel: l10n.save,
         initialWeight: current.weight,
         initialReps: current.reps,
       ),
@@ -203,19 +207,22 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
 
     final action = await showModalBottomSheet<String>(
       context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.delete_outline),
-              title: const Text('Delete set'),
-              subtitle: Text('${rep.weight}*${rep.reps}'),
-              onTap: () => Navigator.pop(context, 'delete'),
-            ),
-          ],
-        ),
-      ),
+      builder: (context) {
+        final l10n = AppLocalizations.of(context)!;
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.delete_outline),
+                title: Text(l10n.deleteSet),
+                subtitle: Text('${rep.weight}*${rep.reps}'),
+                onTap: () => Navigator.pop(context, 'delete'),
+              ),
+            ],
+          ),
+        );
+      },
     );
     if (action != 'delete' || !mounted) return;
     if (repIndex >= set.reps.length) return;
@@ -225,14 +232,15 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
     await _notifyChanged();
     if (!mounted) return;
 
+    final l10n = AppLocalizations.of(context)!;
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Text('Set deleted'),
+        content: Text(l10n.setDeleted),
         duration: const Duration(seconds: 4),
         persist: false,
         action: SnackBarAction(
-          label: 'Undo',
+          label: l10n.undo,
           onPressed: () async {
             set.reps.insert(repIndex, removed);
             if (mounted) setState(() {});
@@ -250,19 +258,22 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
 
     final action = await showModalBottomSheet<String>(
       context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.delete_outline),
-              title: const Text('Delete exercise'),
-              subtitle: Text(set.exercise),
-              onTap: () => Navigator.pop(context, 'delete'),
-            ),
-          ],
-        ),
-      ),
+      builder: (context) {
+        final l10n = AppLocalizations.of(context)!;
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.delete_outline),
+                title: Text(l10n.deleteExercise),
+                subtitle: Text(set.exercise),
+                onTap: () => Navigator.pop(context, 'delete'),
+              ),
+            ],
+          ),
+        );
+      },
     );
     if (action != 'delete' || !mounted) return;
     if (setIndex >= workout.sets.length || workout.sets[setIndex] != set) {
@@ -281,14 +292,15 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
     await _notifyChanged();
     if (!mounted) return;
 
+    final l10n = AppLocalizations.of(context)!;
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('${removed.exercise} removed'),
+        content: Text(l10n.exerciseRemoved(removed.exercise)),
         duration: const Duration(seconds: 4),
         persist: false,
         action: SnackBarAction(
-          label: 'Undo',
+          label: l10n.undo,
           onPressed: () async {
             workout.sets.insert(setIndex, removed);
             if (mounted) setState(() {});
@@ -614,6 +626,7 @@ class _RepDialogState extends State<_RepDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return AlertDialog(
       scrollable: true,
       title: Text(widget.title),
@@ -623,13 +636,13 @@ class _RepDialogState extends State<_RepDialog> {
           TextField(
             controller: _weightCtrl,
             keyboardType: TextInputType.number,
-            decoration: const InputDecoration(labelText: 'weight'),
+            decoration: InputDecoration(labelText: l10n.weight),
             autofocus: true,
           ),
           TextField(
             controller: _repsCtrl,
             keyboardType: TextInputType.number,
-            decoration: const InputDecoration(labelText: 'reps'),
+            decoration: InputDecoration(labelText: l10n.reps),
             onSubmitted: (_) => _submit(),
           ),
         ],
@@ -637,7 +650,7 @@ class _RepDialogState extends State<_RepDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('cancel'),
+          child: Text(l10n.cancel),
         ),
         TextButton(onPressed: _submit, child: Text(widget.actionLabel)),
       ],
@@ -668,8 +681,9 @@ class _EditNameDialogState extends State<_EditNameDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return AlertDialog(
-      title: const Text('Edit exercise'),
+      title: Text(l10n.editExercise),
       content: Autocomplete<String>(
         initialValue: TextEditingValue(text: widget.initialName),
         optionsBuilder: (value) {
@@ -687,7 +701,7 @@ class _EditNameDialogState extends State<_EditNameDialog> {
           return TextField(
             controller: controller,
             focusNode: focusNode,
-            decoration: const InputDecoration(labelText: 'exercise'),
+            decoration: InputDecoration(labelText: l10n.exercise),
             autofocus: true,
             textCapitalization: TextCapitalization.sentences,
             onSubmitted: (_) => _submit(),
@@ -698,9 +712,9 @@ class _EditNameDialogState extends State<_EditNameDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('cancel'),
+          child: Text(l10n.cancel),
         ),
-        TextButton(onPressed: _submit, child: const Text('save')),
+        TextButton(onPressed: _submit, child: Text(l10n.save)),
       ],
     );
   }

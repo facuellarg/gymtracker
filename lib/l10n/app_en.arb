@@ -1,0 +1,61 @@
+{
+  "@@locale": "en",
+  "navLog": "Log",
+  "navHistory": "History",
+  "today": "Today",
+  "history": "History",
+  "addExercise": "Add exercise",
+  "rename": "Rename",
+  "nameThisSession": "Name this session",
+  "noWorkoutYet": "No workout yet",
+  "exercise": "exercise",
+  "cancel": "cancel",
+  "add": "add",
+  "save": "save",
+  "editWorkout": "Edit workout",
+  "name": "name",
+  "failedToLoad": "Failed to load: {error}",
+  "@failedToLoad": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "dbError": "DB error: {error}",
+  "@dbError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "searchHint": "Search by workout or exercise",
+  "noSessions": "No sessions",
+  "continueInLog": "Continue in Log",
+  "done": "Done",
+  "edit": "Edit",
+  "deleteTip": "Long-press a set or exercise name to delete",
+  "deleteSet": "Delete set",
+  "deleteExercise": "Delete exercise",
+  "deleteWorkout": "Delete workout",
+  "workoutDeleted": "Workout deleted",
+  "setDeleted": "Set deleted",
+  "exerciseRemoved": "{exercise} removed",
+  "@exerciseRemoved": {
+    "placeholders": {
+      "exercise": {
+        "type": "String"
+      }
+    }
+  },
+  "undo": "Undo",
+  "weight": "weight",
+  "reps": "reps",
+  "editExercise": "Edit exercise",
+  "settings": "Settings",
+  "language": "Language",
+  "languageSystem": "System default",
+  "languageEnglish": "English",
+  "languageSpanish": "Español"
+}

@@ -1,16 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:gymtracker/core/utils/workout_labels.dart';
 import 'package:gymtracker/features/workouts/models/workouts.dart';
 import 'package:gymtracker/features/workouts/repository/workout_repository.dart';
 import 'package:gymtracker/features/workouts/widgets/Workout.dart';
+import 'package:gymtracker/l10n/app_localizations.dart';
 
 class HistoryScreen extends StatefulWidget {
   final WorkoutRepository repository;
   final VoidCallback onOpenToday;
+  final VoidCallback onOpenSettings;
+  final VoidCallback onTodayChanged;
 
   const HistoryScreen({
     super.key,
     required this.repository,
     required this.onOpenToday,
+    required this.onOpenSettings,
+    required this.onTodayChanged,
   });
 
   @override
@@ -51,11 +57,6 @@ class HistoryScreenState extends State<HistoryScreen> {
         date.day == now.day;
   }
 
-  String _dateLabel(DateTime date) {
-    if (_isToday(date)) return 'Today';
-    return '${date.month}/${date.day}/${date.year}';
-  }
-
   String _preview(Workout w) => w.sets.map((s) => s.exercise).join(', ');
 
   List<Workout> get _filtered {
@@ -83,7 +84,11 @@ class HistoryScreenState extends State<HistoryScreen> {
             builder: (context) => _HistoryDetailPage(
               workout: workout,
               repository: widget.repository,
-              dateLabel: _dateLabel(workout.date),
+              dateLabel: workoutDateLabel(
+                context,
+                workout.date,
+                withYear: true,
+              ),
             ),
           ),
         )
@@ -92,22 +97,89 @@ class HistoryScreenState extends State<HistoryScreen> {
         });
   }
 
+  Future<void> _deleteWorkout(Workout workout) async {
+    final id = workout.id;
+    if (id == null) return;
+
+    final dateLabel = workoutDateLabel(context, workout.date, withYear: true);
+    final name = workout.name.trim();
+    final subtitle = hasCustomWorkoutName(name) ? name : dateLabel;
+
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) {
+        final l10n = AppLocalizations.of(context)!;
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.delete_outline),
+                title: Text(l10n.deleteWorkout),
+                subtitle: Text(subtitle),
+                onTap: () => Navigator.pop(context, 'delete'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (action != 'delete' || !mounted) return;
+
+    final wasToday = _isToday(workout.date);
+    await widget.repository.deleteWorkout(id);
+    if (!mounted) return;
+
+    setState(() => _sessions.removeWhere((w) => w.id == id));
+    workout.id = null;
+    if (wasToday) widget.onTodayChanged();
+
+    final l10n = AppLocalizations.of(context)!;
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(l10n.workoutDeleted),
+        duration: const Duration(seconds: 4),
+        persist: false,
+        action: SnackBarAction(
+          label: l10n.undo,
+          onPressed: () async {
+            await widget.repository.saveWorkout(workout);
+            if (!mounted) return;
+            await reload();
+            if (wasToday) widget.onTodayChanged();
+          },
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final sessions = _filtered;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('History')),
+      appBar: AppBar(
+        title: Text(l10n.history),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings_outlined),
+            tooltip: l10n.settings,
+            onPressed: widget.onOpenSettings,
+          ),
+        ],
+      ),
       body: Column(
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
             child: TextField(
               controller: _query,
-              decoration: const InputDecoration(
-                hintText: 'Search by workout or exercise',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                hintText: l10n.searchHint,
+                prefixIcon: const Icon(Icons.search),
+                border: const OutlineInputBorder(),
                 isDense: true,
               ),
               onChanged: (_) => setState(() {}),
@@ -117,21 +189,24 @@ class HistoryScreenState extends State<HistoryScreen> {
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : sessions.isEmpty
-                    ? const Center(child: Text('No sessions'))
+                    ? Center(child: Text(l10n.noSessions))
                     : ListView.separated(
                         itemCount: sessions.length,
                         separatorBuilder: (_, _) => const Divider(height: 1),
                         itemBuilder: (context, i) {
                           final w = sessions[i];
-                          final dateLabel = _dateLabel(w.date);
+                          final dateLabel = workoutDateLabel(
+                            context,
+                            w.date,
+                            withYear: true,
+                          );
                           final name = w.name.trim();
-                          final hasCustomName =
-                              name.isNotEmpty && name != dateLabel;
+                          final custom = hasCustomWorkoutName(name);
                           final textTheme = Theme.of(context).textTheme;
                           final isToday = _isToday(w.date);
 
                           return ListTile(
-                            title: hasCustomName
+                            title: custom
                                 ? Column(
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
@@ -153,9 +228,7 @@ class HistoryScreenState extends State<HistoryScreen> {
                                     style: textTheme.titleMedium,
                                   ),
                             subtitle: Text(
-                              isToday
-                                  ? 'Continue in Log'
-                                  : _preview(w),
+                              isToday ? l10n.continueInLog : _preview(w),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -163,6 +236,7 @@ class HistoryScreenState extends State<HistoryScreen> {
                                 ? const Icon(Icons.edit_note)
                                 : null,
                             onTap: () => _openSession(w),
+                            onLongPress: () => _deleteWorkout(w),
                           );
                         },
                       ),
@@ -192,31 +266,36 @@ class _HistoryDetailPageState extends State<_HistoryDetailPage> {
   bool _editing = false;
 
   Future<void> _rename() async {
+    final l10n = AppLocalizations.of(context)!;
     final workout = widget.workout;
     final dateLabel = widget.dateLabel;
-    final initial =
-        workout.name.trim().isEmpty ? dateLabel : workout.name.trim();
+    final initial = isDefaultWorkoutName(workout.name)
+        ? dateLabel
+        : workout.name.trim();
     final name = await showDialog<String>(
       context: context,
       builder: (context) => _RenameWorkoutDialog(initialName: initial),
     );
     final trimmed = name?.trim() ?? '';
     if (trimmed.isEmpty || !mounted) return;
-    setState(() => workout.name = trimmed);
+    final stored =
+        trimmed == l10n.today ? defaultWorkoutName : trimmed;
+    setState(() => workout.name = stored);
     await widget.repository.saveWorkout(workout);
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final workout = widget.workout;
     final dateLabel = widget.dateLabel;
     final name = workout.name.trim();
-    final hasCustomName = name.isNotEmpty && name != dateLabel;
+    final custom = hasCustomWorkoutName(name);
     final theme = Theme.of(context).textTheme;
 
     return Scaffold(
       appBar: AppBar(
-        title: hasCustomName
+        title: custom
             ? Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -231,21 +310,21 @@ class _HistoryDetailPageState extends State<_HistoryDetailPage> {
               onSelected: (value) {
                 if (value == 'rename') _rename();
               },
-              itemBuilder: (context) => const [
-                PopupMenuItem(value: 'rename', child: Text('Rename')),
+              itemBuilder: (context) => [
+                PopupMenuItem(value: 'rename', child: Text(l10n.rename)),
               ],
             ),
             TextButton(
               onPressed: () => setState(() => _editing = false),
-              child: const Text('Done'),
+              child: Text(l10n.done),
             ),
           ] else
             PopupMenuButton<String>(
               onSelected: (value) {
                 if (value == 'edit') setState(() => _editing = true);
               },
-              itemBuilder: (context) => const [
-                PopupMenuItem(value: 'edit', child: Text('Edit')),
+              itemBuilder: (context) => [
+                PopupMenuItem(value: 'edit', child: Text(l10n.edit)),
               ],
             ),
         ],
@@ -286,12 +365,13 @@ class _RenameWorkoutDialogState extends State<_RenameWorkoutDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return AlertDialog(
       scrollable: true,
-      title: const Text('Edit workout'),
+      title: Text(l10n.editWorkout),
       content: TextField(
         controller: _nameCtrl,
-        decoration: const InputDecoration(labelText: 'name'),
+        decoration: InputDecoration(labelText: l10n.name),
         autofocus: true,
         textCapitalization: TextCapitalization.sentences,
         onSubmitted: (_) => _submit(),
@@ -299,9 +379,9 @@ class _RenameWorkoutDialogState extends State<_RenameWorkoutDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('cancel'),
+          child: Text(l10n.cancel),
         ),
-        TextButton(onPressed: _submit, child: const Text('save')),
+        TextButton(onPressed: _submit, child: Text(l10n.save)),
       ],
     );
   }

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:gymtracker/core/utils/workout_labels.dart';
 import 'package:gymtracker/features/workouts/models/set.dart';
 import 'package:gymtracker/features/workouts/models/workouts.dart';
 import 'package:gymtracker/features/workouts/repository/workout_repository.dart';
 import 'package:gymtracker/features/workouts/widgets/Workout.dart';
+import 'package:gymtracker/l10n/app_localizations.dart';
 
 class WorkoutScreen extends StatefulWidget {
   final WorkoutRepository repository;
@@ -16,6 +18,7 @@ class WorkoutScreen extends StatefulWidget {
 class _WorkoutScreenState extends State<WorkoutScreen> {
   Workout? _workout;
   Object? _loadError;
+  bool _ready = false;
 
   @override
   void initState() {
@@ -25,52 +28,48 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
 
   Future<void> _load() async {
     try {
-      final result = await widget.repository.getOrCreateToday();
+      final existing = await widget.repository.getToday();
       if (!mounted) return;
       setState(() {
-        _workout = result.workout;
+        _workout = existing ?? widget.repository.draftToday();
         _loadError = null;
+        _ready = true;
       });
-      if (result.created) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _editWorkoutName();
-        });
-      }
     } catch (e) {
       if (!mounted) return;
-      setState(() => _loadError = e);
+      setState(() {
+        _loadError = e;
+        _ready = true;
+      });
     }
   }
 
   Future<void> _save() async {
     final w = _workout;
     if (w == null) return;
+    // Rest day / draft: no DB row until there is at least one exercise.
+    if (w.id == null && w.sets.isEmpty) return;
     await widget.repository.saveWorkout(w);
-  }
-
-  String _titleFor(DateTime date) {
-    final now = DateTime.now();
-    if (date.year == now.year &&
-        date.month == now.month &&
-        date.day == now.day) {
-      return 'Today';
-    }
-    return '${date.month}/${date.day}';
+    if (mounted) setState(() {});
   }
 
   Future<void> _editWorkoutName() async {
+    final l10n = AppLocalizations.of(context)!;
     final workout = _workout;
     if (workout == null) return;
-    final dateLabel = _titleFor(workout.date);
-    final initial =
-        workout.name.trim().isEmpty ? dateLabel : workout.name.trim();
+    final dateLabel = workoutDateLabel(context, workout.date);
+    final initial = isDefaultWorkoutName(workout.name)
+        ? dateLabel
+        : workout.name.trim();
     final name = await showDialog<String>(
       context: context,
       builder: (context) => _EditWorkoutNameDialog(initialName: initial),
     );
     final trimmed = name?.trim() ?? '';
     if (trimmed.isEmpty || !mounted) return;
-    setState(() => workout.name = trimmed);
+    final stored =
+        trimmed == l10n.today ? defaultWorkoutName : trimmed;
+    setState(() => workout.name = stored);
     await _save();
   }
 
@@ -93,28 +92,30 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+
     if (_loadError != null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Today')),
-        body: Center(child: Text('Failed to load: $_loadError')),
+        appBar: AppBar(title: Text(l10n.today)),
+        body: Center(child: Text(l10n.failedToLoad('$_loadError'))),
       );
     }
-    final workout = _workout;
-    if (workout == null) {
+    if (!_ready || _workout == null) {
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),
       );
     }
 
-    final dateLabel = _titleFor(workout.date);
+    final workout = _workout!;
+    final dateLabel = workoutDateLabel(context, workout.date);
     final name = workout.name.trim();
-    final hasCustomName = name.isNotEmpty && name != dateLabel;
+    final custom = hasCustomWorkoutName(name);
     final theme = Theme.of(context).textTheme;
     final empty = workout.sets.isEmpty;
 
     return Scaffold(
       appBar: AppBar(
-        title: hasCustomName
+        title: custom
             ? Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -126,15 +127,15 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.add),
-            tooltip: 'Add exercise',
+            tooltip: l10n.addExercise,
             onPressed: _addExercise,
           ),
           PopupMenuButton<String>(
             onSelected: (value) {
               if (value == 'rename') _editWorkoutName();
             },
-            itemBuilder: (context) => const [
-              PopupMenuItem(value: 'rename', child: Text('Rename')),
+            itemBuilder: (context) => [
+              PopupMenuItem(value: 'rename', child: Text(l10n.rename)),
             ],
           ),
         ],
@@ -164,20 +165,26 @@ class _EmptyWorkoutBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextButton(
-              onPressed: onNameSession,
-              child: const Text('Name this session'),
+            Text(
+              l10n.noWorkoutYet,
+              style: Theme.of(context).textTheme.bodyLarge,
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 16),
             FilledButton(
               onPressed: onAddExercise,
-              child: const Text('Add exercise'),
+              child: Text(l10n.addExercise),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: onNameSession,
+              child: Text(l10n.nameThisSession),
             ),
           ],
         ),
@@ -205,8 +212,9 @@ class _AddExerciseDialogState extends State<_AddExerciseDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return AlertDialog(
-      title: const Text('Add exercise'),
+      title: Text(l10n.addExercise),
       content: Autocomplete<String>(
         optionsBuilder: (value) {
           final q = value.text.trim().toLowerCase();
@@ -223,7 +231,7 @@ class _AddExerciseDialogState extends State<_AddExerciseDialog> {
           return TextField(
             controller: controller,
             focusNode: focusNode,
-            decoration: const InputDecoration(labelText: 'exercise'),
+            decoration: InputDecoration(labelText: l10n.exercise),
             autofocus: true,
             textCapitalization: TextCapitalization.sentences,
             onSubmitted: (_) => _submit(),
@@ -234,9 +242,9 @@ class _AddExerciseDialogState extends State<_AddExerciseDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('cancel'),
+          child: Text(l10n.cancel),
         ),
-        TextButton(onPressed: _submit, child: const Text('add')),
+        TextButton(onPressed: _submit, child: Text(l10n.add)),
       ],
     );
   }
@@ -264,12 +272,13 @@ class _EditWorkoutNameDialogState extends State<_EditWorkoutNameDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return AlertDialog(
       scrollable: true,
-      title: const Text('Edit workout'),
+      title: Text(l10n.editWorkout),
       content: TextField(
         controller: _nameCtrl,
-        decoration: const InputDecoration(labelText: 'name'),
+        decoration: InputDecoration(labelText: l10n.name),
         autofocus: true,
         textCapitalization: TextCapitalization.sentences,
         onSubmitted: (_) => _submit(),
@@ -277,9 +286,9 @@ class _EditWorkoutNameDialogState extends State<_EditWorkoutNameDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('cancel'),
+          child: Text(l10n.cancel),
         ),
-        TextButton(onPressed: _submit, child: const Text('save')),
+        TextButton(onPressed: _submit, child: Text(l10n.save)),
       ],
     );
   }

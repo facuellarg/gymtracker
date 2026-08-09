@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:gymtracker/core/database/app_database.dart';
+import 'package:gymtracker/core/utils/workout_labels.dart';
 import 'package:gymtracker/features/workouts/models/rep.dart';
 import 'package:gymtracker/features/workouts/models/set.dart';
 import 'package:gymtracker/features/workouts/models/workouts.dart';
@@ -25,29 +26,36 @@ class WorkoutRepository {
     );
   }
 
-  /// Returns today's workout and whether it was newly inserted.
-  Future<({Workout workout, bool created})> getOrCreateToday() async {
-    final today = DateTime.now();
-    final key = dateKey(today);
+  /// Today's session if one exists; does not insert.
+  Future<Workout?> getToday() async {
+    await pruneEmptyDefaultWorkouts();
+    final key = dateKey(DateTime.now());
     final existing = await db.query(
       'workouts',
       where: 'date = ?',
       whereArgs: [key],
       limit: 1,
     );
-    if (existing.isNotEmpty) {
-      return (
-        workout: await _loadWorkout(existing.first),
-        created: false,
-      );
-    }
-    final id = await db.insert('workouts', {
-      'name': 'Today',
-      'date': key,
-    });
-    return (
-      workout: Workout(id: id, name: 'Today', date: today, sets: []),
-      created: true,
+    if (existing.isEmpty) return null;
+    return _loadWorkout(existing.first);
+  }
+
+  /// In-memory draft — persisted only on [saveWorkout].
+  Workout draftToday() {
+    final today = DateTime.now();
+    return Workout(
+      name: defaultWorkoutName,
+      date: DateTime(today.year, today.month, today.day),
+      sets: [],
+    );
+  }
+
+  /// Ghost cleanup: untitled sessions with no exercises (e.g. old eager create).
+  Future<void> pruneEmptyDefaultWorkouts() async {
+    await db.rawDelete(
+      'DELETE FROM workouts WHERE name = ? AND id NOT IN '
+      '(SELECT DISTINCT workout_id FROM exercise_sets)',
+      [defaultWorkoutName],
     );
   }
 
@@ -69,6 +77,10 @@ class WorkoutRepository {
     );
     if (rows.isEmpty) return null;
     return _loadWorkout(rows.first);
+  }
+
+  Future<void> deleteWorkout(int id) async {
+    await db.delete('workouts', where: 'id = ?', whereArgs: [id]);
   }
 
   /// Distinct exercise names the user has logged (for autocomplete).
