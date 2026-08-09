@@ -64,6 +64,19 @@ class AppLocalizationsEs extends AppLocalizations {
   String get searchHint => 'Buscar por entrenamiento o ejercicio';
 
   @override
+  String viewExercise(String name) {
+    return 'Ver $name';
+  }
+
+  @override
+  String lastSession(String preview) {
+    return 'último: $preview';
+  }
+
+  @override
+  String get noExerciseHistory => 'Sin historial para este ejercicio';
+
+  @override
   String get noSessions => 'Sin sesiones';
 
   @override

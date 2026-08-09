@@ -31,6 +31,23 @@
     }
   },
   "searchHint": "Search by workout or exercise",
+  "viewExercise": "View {name}",
+  "@viewExercise": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "lastSession": "last: {preview}",
+  "@lastSession": {
+    "placeholders": {
+      "preview": {
+        "type": "String"
+      }
+    }
+  },
+  "noExerciseHistory": "No history for this exercise",
   "noSessions": "No sessions",
   "addPastWorkout": "Add past workout",
   "continueInLog": "Continue in Log",

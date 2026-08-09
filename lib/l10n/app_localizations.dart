@@ -200,6 +200,24 @@ abstract class AppLocalizations {
   /// **'Search by workout or exercise'**
   String get searchHint;
 
+  /// No description provided for @viewExercise.
+  ///
+  /// In en, this message translates to:
+  /// **'View {name}'**
+  String viewExercise(String name);
+
+  /// No description provided for @lastSession.
+  ///
+  /// In en, this message translates to:
+  /// **'last: {preview}'**
+  String lastSession(String preview);
+
+  /// No description provided for @noExerciseHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'No history for this exercise'**
+  String get noExerciseHistory;
+
   /// No description provided for @noSessions.
   ///
   /// In en, this message translates to:

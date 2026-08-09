@@ -26,7 +26,7 @@ class HistoryScreen extends StatefulWidget {
 }
 
 class HistoryScreenState extends State<HistoryScreen> {
-  final _query = TextEditingController();
+  String _queryText = '';
   List<Workout> _sessions = [];
   bool _loading = true;
 
@@ -34,12 +34,6 @@ class HistoryScreenState extends State<HistoryScreen> {
   void initState() {
     super.initState();
     reload();
-  }
-
-  @override
-  void dispose() {
-    _query.dispose();
-    super.dispose();
   }
 
   Future<void> reload() async {
@@ -61,8 +55,26 @@ class HistoryScreenState extends State<HistoryScreen> {
 
   String _preview(Workout w) => w.sets.map((s) => s.exercise).join(', ');
 
+  /// User-grown exercise names for search autocomplete (deduped).
+  List<String> get _exerciseSuggestions {
+    final seen = <String>{};
+    final out = <String>[];
+    for (final w in _sessions) {
+      for (final s in w.sets) {
+        final name = s.exercise.trim();
+        final key = normalizeExerciseKey(name);
+        if (key.isEmpty || !seen.add(key)) continue;
+        out.add(name);
+      }
+    }
+    out.sort(
+      (a, b) => a.toLowerCase().compareTo(b.toLowerCase()),
+    );
+    return out;
+  }
+
   List<Workout> get _filtered {
-    final q = _query.text.trim().toLowerCase();
+    final q = _queryText.trim().toLowerCase();
     final list = [..._sessions]..sort((a, b) => b.date.compareTo(a.date));
     if (q.isEmpty) return list;
     return list
@@ -72,6 +84,99 @@ class HistoryScreenState extends State<HistoryScreen> {
               w.sets.any((s) => s.exercise.toLowerCase().contains(q)),
         )
         .toList();
+  }
+
+  String? get _matchedExercise {
+    final sorted = [..._sessions]..sort((a, b) => b.date.compareTo(a.date));
+    return matchExerciseName(
+      [
+        for (final w in sorted)
+          for (final s in w.sets) (exercise: s.exercise),
+      ],
+      _queryText,
+    );
+  }
+
+  List<({Workout workout, ExerciseSet set})> _peekHistory(String exerciseName) {
+    final key = normalizeExerciseKey(exerciseName);
+    final sorted = [..._sessions]..sort((a, b) => b.date.compareTo(a.date));
+    final out = <({Workout workout, ExerciseSet set})>[];
+    for (final w in sorted) {
+      for (final s in w.sets) {
+        if (normalizeExerciseKey(s.exercise) == key) {
+          out.add((workout: w, set: s));
+          break;
+        }
+      }
+      if (out.length >= 5) break;
+    }
+    return out;
+  }
+
+  Future<void> _showExercisePeek(String exerciseName) async {
+    final entries = _peekHistory(exerciseName);
+    if (!mounted) return;
+    final picked = await showModalBottomSheet<Workout>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        final l10n = AppLocalizations.of(context)!;
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                child: Text(
+                  exerciseName,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              if (entries.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(l10n.noExerciseHistory),
+                )
+              else
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.sizeOf(context).height * 0.45,
+                  ),
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: entries.length,
+                    separatorBuilder: (_, _) => const Divider(height: 1),
+                    itemBuilder: (context, i) {
+                      final e = entries[i];
+                      final dateLabel = workoutDateLabel(
+                        context,
+                        e.workout.date,
+                        withYear: true,
+                      );
+                      final preview = formatRepsPreview([
+                        for (final r in e.set.reps)
+                          (weight: r.weight, reps: r.reps),
+                      ]);
+                      return ListTile(
+                        title: Text(dateLabel),
+                        subtitle: Text(
+                          preview.isEmpty ? '—' : preview,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        onTap: () => Navigator.pop(context, e.workout),
+                      );
+                    },
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+    if (picked == null || !mounted) return;
+    _openSession(picked);
   }
 
   void _openSession(Workout workout, {bool startEditing = false}) {
@@ -182,6 +287,15 @@ class HistoryScreenState extends State<HistoryScreen> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final sessions = _filtered;
+    final matched = _matchedExercise;
+    final peekEntries =
+        matched == null ? const <({Workout workout, ExerciseSet set})>[] : _peekHistory(matched);
+    final lastPreview = peekEntries.isEmpty
+        ? ''
+        : formatRepsPreview([
+            for (final r in peekEntries.first.set.reps)
+              (weight: r.weight, reps: r.reps),
+          ]);
 
     return Scaffold(
       appBar: AppBar(
@@ -203,17 +317,50 @@ class HistoryScreenState extends State<HistoryScreen> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-            child: TextField(
-              controller: _query,
-              decoration: InputDecoration(
-                hintText: l10n.searchHint,
-                prefixIcon: const Icon(Icons.search),
-                border: const OutlineInputBorder(),
-                isDense: true,
+            child: Autocomplete<String>(
+              optionsBuilder: (value) => exerciseNameSuggestions(
+                _exerciseSuggestions,
+                value.text,
               ),
-              onChanged: (_) => setState(() {}),
+              onSelected: (selection) {
+                setState(() => _queryText = selection);
+              },
+              fieldViewBuilder:
+                  (context, controller, focusNode, onFieldSubmitted) {
+                return TextField(
+                  controller: controller,
+                  focusNode: focusNode,
+                  decoration: InputDecoration(
+                    hintText: l10n.searchHint,
+                    prefixIcon: const Icon(Icons.search),
+                    border: const OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  textCapitalization: TextCapitalization.sentences,
+                  onChanged: (v) => setState(() => _queryText = v),
+                  // Don't call onFieldSubmitted — that selects the highlighted
+                  // suggestion and replaces free-text queries like "pecho".
+                  onSubmitted: (_) => focusNode.unfocus(),
+                );
+              },
+              optionsMaxHeight: 200,
             ),
           ),
+          if (matched != null)
+            ListTile(
+              leading: const Icon(Icons.fitness_center_outlined),
+              title: Text(l10n.viewExercise(matched)),
+              subtitle: lastPreview.isEmpty
+                  ? null
+                  : Text(
+                      l10n.lastSession(lastPreview),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => _showExercisePeek(matched),
+            ),
+          if (matched != null) const Divider(height: 1),
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
