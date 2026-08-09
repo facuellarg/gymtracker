@@ -338,6 +338,12 @@ class _HistoryDetailPageState extends State<_HistoryDetailPage> {
         loadExerciseNames: _editing
             ? widget.repository.distinctExerciseNames
             : null,
+        loadPreviousReps: _editing
+            ? (name) => widget.repository.lastRepsForExercise(
+                  name,
+                  excludeWorkoutId: workout.id,
+                )
+            : null,
       ),
     );
   }

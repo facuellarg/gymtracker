@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:gymtracker/core/utils/exercise_name.dart';
 import 'package:gymtracker/features/workouts/models/rep.dart';
 import 'package:gymtracker/features/workouts/models/set.dart';
 import 'package:gymtracker/features/workouts/models/workouts.dart';
@@ -9,6 +10,7 @@ class WorkoutWidget extends StatefulWidget {
   final Workout workout;
   final Future<void> Function(Workout workout)? onChanged;
   final Future<List<String>> Function()? loadExerciseNames;
+  final Future<List<Rep>> Function(String exercise)? loadPreviousReps;
   final bool readOnly;
 
   const WorkoutWidget({
@@ -16,6 +18,7 @@ class WorkoutWidget extends StatefulWidget {
     required this.workout,
     this.onChanged,
     this.loadExerciseNames,
+    this.loadPreviousReps,
     this.readOnly = false,
   });
 
@@ -27,11 +30,15 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
   static const _visibleCols = 5;
   static const _addW = 40.0;
   static const _tipKey = 'tip_long_press_delete';
+  static const _maxGhosts = 5;
 
   Workout get workout => widget.workout;
 
   final _ctrls = <ScrollController>[];
   bool _syncing = false;
+
+  /// Previous-session reps by [normalizeExerciseKey].
+  Map<String, List<Rep>> _previous = {};
 
   int? _flashSet;
   int? _flashRep;
@@ -42,13 +49,49 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
   @override
   void initState() {
     super.initState();
-    if (!widget.readOnly) _maybeShowDeleteTip();
+    if (!widget.readOnly) {
+      _maybeShowDeleteTip();
+      _refreshPrevious();
+    }
   }
 
   @override
   void didUpdateWidget(covariant WorkoutWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.readOnly && !widget.readOnly) _maybeShowDeleteTip();
+    if (oldWidget.readOnly && !widget.readOnly) {
+      _maybeShowDeleteTip();
+      _refreshPrevious();
+    } else if (!widget.readOnly &&
+        _exerciseKeys(oldWidget.workout) != _exerciseKeys(workout)) {
+      _refreshPrevious();
+    }
+  }
+
+  Set<String> _exerciseKeys(Workout w) => {
+        for (final s in w.sets) normalizeExerciseKey(s.exercise),
+      };
+
+  List<Rep> _ghostsFor(ExerciseSet set) {
+    if (widget.readOnly || set.reps.isNotEmpty) return const [];
+    final list = _previous[normalizeExerciseKey(set.exercise)];
+    if (list == null || list.isEmpty) return const [];
+    return list.length <= _maxGhosts ? list : list.sublist(0, _maxGhosts);
+  }
+
+  Future<void> _refreshPrevious() async {
+    final loader = widget.loadPreviousReps;
+    if (widget.readOnly || loader == null) {
+      if (_previous.isNotEmpty && mounted) setState(() => _previous = {});
+      return;
+    }
+    final next = <String, List<Rep>>{};
+    for (final set in workout.sets) {
+      final key = normalizeExerciseKey(set.exercise);
+      if (key.isEmpty || next.containsKey(key)) continue;
+      next[key] = await loader(set.exercise);
+    }
+    if (!mounted) return;
+    setState(() => _previous = next);
   }
 
   Future<void> _maybeShowDeleteTip() async {
@@ -119,16 +162,19 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
     });
   }
 
-  Future<void> _addRep(ExerciseSet set) async {
+  Future<void> _addRep(ExerciseSet set, {Rep? suggest}) async {
     if (widget.readOnly) return;
     final l10n = AppLocalizations.of(context)!;
+    final ghosts = _ghostsFor(set);
+    final fromToday = set.reps.isNotEmpty ? set.reps.last : null;
+    final fromPrev = suggest ?? (ghosts.isNotEmpty ? ghosts.first : null);
     final result = await showDialog<(int, int)>(
       context: context,
       builder: (context) => _RepDialog(
         title: set.exercise,
         actionLabel: l10n.add,
-        initialWeight: set.reps.isEmpty ? null : set.reps.last.weight,
-        initialReps: set.reps.isEmpty ? null : set.reps.last.reps,
+        initialWeight: fromToday?.weight ?? fromPrev?.weight,
+        initialReps: fromToday?.reps ?? fromPrev?.reps,
       ),
     );
     if (result == null || !mounted) return;
@@ -198,6 +244,7 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
       );
     });
     await _notifyChanged();
+    await _refreshPrevious();
   }
 
   Future<void> _deleteRep(ExerciseSet set, int repIndex) async {
@@ -277,7 +324,6 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
     );
     if (action != 'delete' || !mounted) return;
     if (setIndex >= workout.sets.length || workout.sets[setIndex] != set) {
-      // list may have shifted; find again
       final i = workout.sets.indexOf(set);
       if (i < 0) return;
       await _removeExerciseAt(i, set);
@@ -355,10 +401,11 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
     final sets = workout.sets;
     _ensureControllers(sets.length);
 
-    final colCount = sets.fold<int>(
-      0,
-      (max, set) => set.reps.length > max ? set.reps.length : max,
-    );
+    final colCount = sets.fold<int>(0, (max, set) {
+      final ghosts = _ghostsFor(set).length;
+      final n = set.reps.length > ghosts ? set.reps.length : ghosts;
+      return n > max ? n : max;
+    });
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -378,8 +425,11 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
           itemCount: sets.length,
           separatorBuilder: (_, _) => const SizedBox(height: 16),
           itemBuilder: (context, i) {
+            final set = sets[i];
+            final ghosts = _ghostsFor(set);
             return _ExerciseBlock(
-              set: sets[i],
+              set: set,
+              ghosts: ghosts,
               colCount: colCount,
               cellW: cellW,
               controller: _ctrls[i],
@@ -387,11 +437,12 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
               showLeftFade: _showLeftFade,
               showRightFade: _showRightFade,
               readOnly: widget.readOnly,
-              onAdd: () => _addRep(sets[i]),
-              onEdit: (repIndex) => _editRep(sets[i], repIndex),
-              onEditName: () => _editExerciseName(sets[i]),
-              onDeleteRep: (repIndex) => _deleteRep(sets[i], repIndex),
-              onDeleteExercise: () => _deleteExercise(sets[i]),
+              onAdd: () => _addRep(set),
+              onEdit: (repIndex) => _editRep(set, repIndex),
+              onGhostTap: (g) => _addRep(set, suggest: g),
+              onEditName: () => _editExerciseName(set),
+              onDeleteRep: (repIndex) => _deleteRep(set, repIndex),
+              onDeleteExercise: () => _deleteExercise(set),
             );
           },
         );
@@ -405,6 +456,7 @@ class _ExerciseBlock extends StatelessWidget {
   static const _fadeW = 24.0;
 
   final ExerciseSet set;
+  final List<Rep> ghosts;
   final int colCount;
   final double cellW;
   final ScrollController controller;
@@ -414,12 +466,14 @@ class _ExerciseBlock extends StatelessWidget {
   final bool readOnly;
   final VoidCallback onAdd;
   final ValueChanged<int> onEdit;
+  final ValueChanged<Rep> onGhostTap;
   final VoidCallback onEditName;
   final ValueChanged<int> onDeleteRep;
   final VoidCallback onDeleteExercise;
 
   const _ExerciseBlock({
     required this.set,
+    required this.ghosts,
     required this.colCount,
     required this.cellW,
     required this.controller,
@@ -429,6 +483,7 @@ class _ExerciseBlock extends StatelessWidget {
     required this.readOnly,
     required this.onAdd,
     required this.onEdit,
+    required this.onGhostTap,
     required this.onEditName,
     required this.onDeleteRep,
     required this.onDeleteExercise,
@@ -502,7 +557,28 @@ class _ExerciseBlock extends StatelessWidget {
                                         ),
                                       ],
                                     )
-                                  : null,
+                                  : c < ghosts.length
+                                      ? Row(
+                                          children: [
+                                            if (c > 0)
+                                              Container(
+                                                width: 1,
+                                                height: 18,
+                                                margin: const EdgeInsets.only(
+                                                  right: 6,
+                                                ),
+                                                color: scheme.outlineVariant
+                                                    .withValues(alpha: 0.35),
+                                              ),
+                                            Expanded(
+                                              child: _ghostCell(
+                                                scheme: scheme,
+                                                rep: ghosts[c],
+                                              ),
+                                            ),
+                                          ],
+                                        )
+                                      : null,
                             ),
                         ],
                       ),
@@ -581,6 +657,26 @@ class _ExerciseBlock extends StatelessWidget {
       onLongPress: () => onDeleteRep(index),
       borderRadius: BorderRadius.circular(4),
       child: child,
+    );
+  }
+
+  Widget _ghostCell({required ColorScheme scheme, required Rep rep}) {
+    return InkWell(
+      onTap: () => onGhostTap(rep),
+      borderRadius: BorderRadius.circular(4),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+          child: Text(
+            '${rep.weight}*${rep.reps}',
+            style: TextStyle(
+              color: scheme.onSurface.withValues(alpha: 0.38),
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -676,7 +772,7 @@ class _EditNameDialogState extends State<_EditNameDialog> {
 
   void _submit() {
     final text = _fieldCtrl?.text ?? widget.initialName;
-    Navigator.pop(context, text);
+    Navigator.pop(context, text.trim());
   }
 
   @override
@@ -687,15 +783,15 @@ class _EditNameDialogState extends State<_EditNameDialog> {
       content: Autocomplete<String>(
         initialValue: TextEditingValue(text: widget.initialName),
         optionsBuilder: (value) {
-          final q = value.text.trim().toLowerCase();
+          final q = normalizeExerciseKey(value.text);
           if (q.isEmpty || widget.suggestions.isEmpty) {
             return const Iterable<String>.empty();
           }
           return widget.suggestions
-              .where((s) => s.toLowerCase().contains(q))
+              .where((s) => normalizeExerciseKey(s).contains(q))
               .take(8);
         },
-        onSelected: (selection) => Navigator.pop(context, selection),
+        onSelected: (selection) => Navigator.pop(context, selection.trim()),
         fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
           _fieldCtrl = controller;
           return TextField(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gymtracker/core/utils/exercise_name.dart';
 import 'package:gymtracker/core/utils/workout_labels.dart';
 import 'package:gymtracker/features/workouts/models/set.dart';
 import 'package:gymtracker/features/workouts/models/workouts.dart';
@@ -149,6 +150,10 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
               workout: workout,
               onChanged: (w) => widget.repository.saveWorkout(w),
               loadExerciseNames: widget.repository.distinctExerciseNames,
+              loadPreviousReps: (name) => widget.repository.lastRepsForExercise(
+                name,
+                excludeWorkoutId: workout.id,
+              ),
             ),
     );
   }
@@ -206,7 +211,7 @@ class _AddExerciseDialogState extends State<_AddExerciseDialog> {
   TextEditingController? _fieldCtrl;
 
   void _submit() {
-    final text = _fieldCtrl?.text ?? '';
+    final text = (_fieldCtrl?.text ?? '').trim();
     Navigator.pop(context, text);
   }
 
@@ -217,15 +222,15 @@ class _AddExerciseDialogState extends State<_AddExerciseDialog> {
       title: Text(l10n.addExercise),
       content: Autocomplete<String>(
         optionsBuilder: (value) {
-          final q = value.text.trim().toLowerCase();
+          final q = normalizeExerciseKey(value.text);
           if (q.isEmpty || widget.suggestions.isEmpty) {
             return const Iterable<String>.empty();
           }
           return widget.suggestions
-              .where((s) => s.toLowerCase().contains(q))
+              .where((s) => normalizeExerciseKey(s).contains(q))
               .take(8);
         },
-        onSelected: (selection) => Navigator.pop(context, selection),
+        onSelected: (selection) => Navigator.pop(context, selection.trim()),
         fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
           _fieldCtrl = controller;
           return TextField(
