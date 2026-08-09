@@ -32,6 +32,11 @@ class _HomeScreenState extends State<HomeScreen> {
         builder: (context) => SettingsScreen(
           localeCode: widget.localeCode,
           onLocaleCodeChanged: widget.onLocaleCodeChanged,
+          repository: widget.repository,
+          onDataChanged: () {
+            _refreshLog();
+            _historyKey.currentState?.reload();
+          },
         ),
       ),
     );

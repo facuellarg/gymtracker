@@ -128,4 +128,38 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get languageSpanish => 'Español';
+
+  @override
+  String get backup => 'Copia de seguridad';
+
+  @override
+  String get exportWorkouts => 'Exportar entrenamientos';
+
+  @override
+  String get exportWorkoutsHint =>
+      'Guarda un JSON para conservarlo o compartirlo';
+
+  @override
+  String get exportDone => 'Copia guardada';
+
+  @override
+  String get importWorkouts => 'Importar entrenamientos';
+
+  @override
+  String get importWorkoutsHint => 'Carga entrenamientos desde un JSON';
+
+  @override
+  String importDone(int count) {
+    return 'Se importaron $count entrenamientos';
+  }
+
+  @override
+  String exportFailed(String error) {
+    return 'Error al exportar: $error';
+  }
+
+  @override
+  String importFailed(String error) {
+    return 'Error al importar: $error';
+  }
 }

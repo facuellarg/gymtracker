@@ -325,6 +325,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Español'**
   String get languageSpanish;
+
+  /// No description provided for @backup.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup'**
+  String get backup;
+
+  /// No description provided for @exportWorkouts.
+  ///
+  /// In en, this message translates to:
+  /// **'Export workouts'**
+  String get exportWorkouts;
+
+  /// No description provided for @exportWorkoutsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Save a JSON file you can keep or share'**
+  String get exportWorkoutsHint;
+
+  /// No description provided for @exportDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup saved'**
+  String get exportDone;
+
+  /// No description provided for @importWorkouts.
+  ///
+  /// In en, this message translates to:
+  /// **'Import workouts'**
+  String get importWorkouts;
+
+  /// No description provided for @importWorkoutsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Load workouts from a JSON backup'**
+  String get importWorkoutsHint;
+
+  /// No description provided for @importDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Imported {count} workouts'**
+  String importDone(int count);
+
+  /// No description provided for @exportFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Export failed: {error}'**
+  String exportFailed(String error);
+
+  /// No description provided for @importFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Import failed: {error}'**
+  String importFailed(String error);
 }
 
 class _AppLocalizationsDelegate

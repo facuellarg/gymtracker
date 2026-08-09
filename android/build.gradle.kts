@@ -16,6 +16,25 @@ subprojects {
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
 subprojects {
+    pluginManager.withPlugin("com.android.library") {
+        extensions.configure<com.android.build.gradle.LibraryExtension>("android") {
+            compileSdk = 36
+            compileOptions {
+                sourceCompatibility = JavaVersion.VERSION_17
+                targetCompatibility = JavaVersion.VERSION_17
+            }
+        }
+    }
+    pluginManager.withPlugin("org.jetbrains.kotlin.android") {
+        extensions.configure<org.jetbrains.kotlin.gradle.dsl.KotlinAndroidProjectExtension>("kotlin") {
+            compilerOptions {
+                jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+            }
+        }
+    }
+}
+
+subprojects {
     project.evaluationDependsOn(":app")
 }
 

@@ -58,5 +58,35 @@
   "language": "Language",
   "languageSystem": "System default",
   "languageEnglish": "English",
-  "languageSpanish": "Español"
+  "languageSpanish": "Español",
+  "backup": "Backup",
+  "exportWorkouts": "Export workouts",
+  "exportWorkoutsHint": "Save a JSON file you can keep or share",
+  "exportDone": "Backup saved",
+  "importWorkouts": "Import workouts",
+  "importWorkoutsHint": "Load workouts from a JSON backup",
+  "importDone": "Imported {count} workouts",
+  "@importDone": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "exportFailed": "Export failed: {error}",
+  "@exportFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "importFailed": "Import failed: {error}",
+  "@importFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  }
 }

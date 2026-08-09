@@ -147,10 +147,7 @@ class WorkoutRepository {
     );
     return [
       for (final r in repRows)
-        Rep(
-          weight: r['weight'] as int,
-          reps: r['reps'] as int,
-        ),
+        Rep(weight: r['weight'] as int, reps: r['reps'] as int),
     ];
   }
 

@@ -37,5 +37,14 @@
   "language": "Idioma",
   "languageSystem": "Idioma del sistema",
   "languageEnglish": "English",
-  "languageSpanish": "Español"
+  "languageSpanish": "Español",
+  "backup": "Copia de seguridad",
+  "exportWorkouts": "Exportar entrenamientos",
+  "exportWorkoutsHint": "Guarda un JSON para conservarlo o compartirlo",
+  "exportDone": "Copia guardada",
+  "importWorkouts": "Importar entrenamientos",
+  "importWorkoutsHint": "Carga entrenamientos desde un JSON",
+  "importDone": "Se importaron {count} entrenamientos",
+  "exportFailed": "Error al exportar: {error}",
+  "importFailed": "Error al importar: {error}"
 }
