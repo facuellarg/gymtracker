@@ -51,13 +51,39 @@ class WorkoutRepository {
     );
   }
 
-  /// Ghost cleanup: untitled sessions with no exercises (e.g. old eager create).
+  /// Ghost cleanup: today's untitled sessions with no exercises only.
   Future<void> pruneEmptyDefaultWorkouts() async {
+    final today = dateKey(DateTime.now());
     await db.rawDelete(
-      'DELETE FROM workouts WHERE name = ? AND id NOT IN '
+      'DELETE FROM workouts WHERE name = ? AND date = ? AND id NOT IN '
       '(SELECT DISTINCT workout_id FROM exercise_sets)',
-      [defaultWorkoutName],
+      [defaultWorkoutName, today],
     );
+  }
+
+  /// Session for [date] if any.
+  Future<Workout?> getByDate(DateTime date) async {
+    final key = dateKey(date);
+    final existing = await db.query(
+      'workouts',
+      where: 'date = ?',
+      whereArgs: [key],
+      limit: 1,
+    );
+    if (existing.isEmpty) return null;
+    return _loadWorkout(existing.first);
+  }
+
+  /// Load or create an untitled session for [date] (date-only, no time).
+  Future<Workout> getOrCreateForDate(DateTime date) async {
+    final d = DateTime(date.year, date.month, date.day);
+    final existing = await getByDate(d);
+    if (existing != null) return existing;
+    final id = await db.insert('workouts', {
+      'name': defaultWorkoutName,
+      'date': dateKey(d),
+    });
+    return Workout(id: id, name: defaultWorkoutName, date: d, sets: []);
   }
 
   Future<List<Workout>> getAll() async {

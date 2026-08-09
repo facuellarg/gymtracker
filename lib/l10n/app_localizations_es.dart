@@ -67,6 +67,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get noSessions => 'Sin sesiones';
 
   @override
+  String get addPastWorkout => 'Añadir entrenamiento pasado';
+
+  @override
   String get continueInLog => 'Continuar en Registro';
 
   @override

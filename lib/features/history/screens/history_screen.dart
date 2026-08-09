@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:gymtracker/core/utils/exercise_name.dart';
 import 'package:gymtracker/core/utils/workout_labels.dart';
+import 'package:gymtracker/features/workouts/models/set.dart';
 import 'package:gymtracker/features/workouts/models/workouts.dart';
 import 'package:gymtracker/features/workouts/repository/workout_repository.dart';
 import 'package:gymtracker/features/workouts/widgets/Workout.dart';
@@ -72,7 +74,7 @@ class HistoryScreenState extends State<HistoryScreen> {
         .toList();
   }
 
-  void _openSession(Workout workout) {
+  void _openSession(Workout workout, {bool startEditing = false}) {
     if (_isToday(workout.date)) {
       widget.onOpenToday();
       return;
@@ -89,12 +91,34 @@ class HistoryScreenState extends State<HistoryScreen> {
                 workout.date,
                 withYear: true,
               ),
+              startEditing: startEditing,
             ),
           ),
         )
         .then((_) {
           if (mounted) reload();
         });
+  }
+
+  Future<void> _addPastWorkout() async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: today.subtract(const Duration(days: 1)),
+      firstDate: DateTime(today.year - 10),
+      lastDate: today,
+    );
+    if (picked == null || !mounted) return;
+
+    if (_isToday(picked)) {
+      widget.onOpenToday();
+      return;
+    }
+
+    final workout = await widget.repository.getOrCreateForDate(picked);
+    if (!mounted) return;
+    _openSession(workout, startEditing: true);
   }
 
   Future<void> _deleteWorkout(Workout workout) async {
@@ -163,6 +187,11 @@ class HistoryScreenState extends State<HistoryScreen> {
       appBar: AppBar(
         title: Text(l10n.history),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.add),
+            tooltip: l10n.addPastWorkout,
+            onPressed: _addPastWorkout,
+          ),
           IconButton(
             icon: const Icon(Icons.settings_outlined),
             tooltip: l10n.settings,
@@ -251,11 +280,13 @@ class _HistoryDetailPage extends StatefulWidget {
   final Workout workout;
   final WorkoutRepository repository;
   final String dateLabel;
+  final bool startEditing;
 
   const _HistoryDetailPage({
     required this.workout,
     required this.repository,
     required this.dateLabel,
+    this.startEditing = false,
   });
 
   @override
@@ -263,7 +294,7 @@ class _HistoryDetailPage extends StatefulWidget {
 }
 
 class _HistoryDetailPageState extends State<_HistoryDetailPage> {
-  bool _editing = false;
+  late bool _editing = widget.startEditing;
 
   Future<void> _rename() async {
     final l10n = AppLocalizations.of(context)!;
@@ -284,6 +315,23 @@ class _HistoryDetailPageState extends State<_HistoryDetailPage> {
     await widget.repository.saveWorkout(workout);
   }
 
+  Future<void> _addExercise() async {
+    final workout = widget.workout;
+    final suggestions = await widget.repository.distinctExerciseNames();
+    if (!mounted) return;
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => _AddExerciseDialog(suggestions: suggestions),
+    );
+    final trimmed = name?.trim() ?? '';
+    if (trimmed.isEmpty || !mounted) return;
+    setState(() {
+      _editing = true;
+      workout.sets.add(ExerciseSet(exercise: trimmed, reps: []));
+    });
+    await widget.repository.saveWorkout(workout);
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -292,6 +340,7 @@ class _HistoryDetailPageState extends State<_HistoryDetailPage> {
     final name = workout.name.trim();
     final custom = hasCustomWorkoutName(name);
     final theme = Theme.of(context).textTheme;
+    final empty = workout.sets.isEmpty;
 
     return Scaffold(
       appBar: AppBar(
@@ -306,6 +355,11 @@ class _HistoryDetailPageState extends State<_HistoryDetailPage> {
             : Text(dateLabel),
         actions: [
           if (_editing) ...[
+            IconButton(
+              icon: const Icon(Icons.add),
+              tooltip: l10n.addExercise,
+              onPressed: _addExercise,
+            ),
             PopupMenuButton<String>(
               onSelected: (value) {
                 if (value == 'rename') _rename();
@@ -329,22 +383,143 @@ class _HistoryDetailPageState extends State<_HistoryDetailPage> {
             ),
         ],
       ),
-      body: WorkoutWidget(
-        workout: workout,
-        readOnly: !_editing,
-        onChanged: _editing
-            ? (w) => widget.repository.saveWorkout(w)
-            : null,
-        loadExerciseNames: _editing
-            ? widget.repository.distinctExerciseNames
-            : null,
-        loadPreviousReps: _editing
-            ? (name) => widget.repository.lastRepsForExercise(
-                  name,
-                  excludeWorkoutId: workout.id,
-                )
-            : null,
+      body: empty
+          ? _EmptyPastBody(
+              editing: _editing,
+              onNameSession: () async {
+                setState(() => _editing = true);
+                await _rename();
+              },
+              onAddExercise: _addExercise,
+              onStartEdit: () => setState(() => _editing = true),
+            )
+          : WorkoutWidget(
+              workout: workout,
+              readOnly: !_editing,
+              onChanged: _editing
+                  ? (w) => widget.repository.saveWorkout(w)
+                  : null,
+              loadExerciseNames: _editing
+                  ? widget.repository.distinctExerciseNames
+                  : null,
+              loadPreviousReps: _editing
+                  ? (name) => widget.repository.lastRepsForExercise(
+                        name,
+                        excludeWorkoutId: workout.id,
+                      )
+                  : null,
+            ),
+    );
+  }
+}
+
+class _EmptyPastBody extends StatelessWidget {
+  final bool editing;
+  final VoidCallback onNameSession;
+  final VoidCallback onAddExercise;
+  final VoidCallback onStartEdit;
+
+  const _EmptyPastBody({
+    required this.editing,
+    required this.onNameSession,
+    required this.onAddExercise,
+    required this.onStartEdit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    if (!editing) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: FilledButton(
+            onPressed: onStartEdit,
+            child: Text(l10n.edit),
+          ),
+        ),
+      );
+    }
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              l10n.noWorkoutYet,
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: onAddExercise,
+              child: Text(l10n.addExercise),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: onNameSession,
+              child: Text(l10n.nameThisSession),
+            ),
+          ],
+        ),
       ),
+    );
+  }
+}
+
+class _AddExerciseDialog extends StatefulWidget {
+  final List<String> suggestions;
+
+  const _AddExerciseDialog({required this.suggestions});
+
+  @override
+  State<_AddExerciseDialog> createState() => _AddExerciseDialogState();
+}
+
+class _AddExerciseDialogState extends State<_AddExerciseDialog> {
+  TextEditingController? _fieldCtrl;
+
+  void _submit() {
+    final text = (_fieldCtrl?.text ?? '').trim();
+    Navigator.pop(context, text);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    return AlertDialog(
+      title: Text(l10n.addExercise),
+      content: Autocomplete<String>(
+        optionsBuilder: (value) {
+          final q = normalizeExerciseKey(value.text);
+          if (q.isEmpty || widget.suggestions.isEmpty) {
+            return const Iterable<String>.empty();
+          }
+          return widget.suggestions
+              .where((s) => normalizeExerciseKey(s).contains(q))
+              .take(8);
+        },
+        onSelected: (selection) => Navigator.pop(context, selection.trim()),
+        fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+          _fieldCtrl = controller;
+          return TextField(
+            controller: controller,
+            focusNode: focusNode,
+            decoration: InputDecoration(labelText: l10n.exercise),
+            autofocus: true,
+            textCapitalization: TextCapitalization.sentences,
+            onSubmitted: (_) => _submit(),
+          );
+        },
+        optionsMaxHeight: 200,
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(l10n.cancel),
+        ),
+        TextButton(onPressed: _submit, child: Text(l10n.add)),
+      ],
     );
   }
 }

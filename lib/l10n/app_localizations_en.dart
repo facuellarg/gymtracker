@@ -67,6 +67,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get noSessions => 'No sessions';
 
   @override
+  String get addPastWorkout => 'Add past workout';
+
+  @override
   String get continueInLog => 'Continue in Log';
 
   @override

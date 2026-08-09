@@ -206,6 +206,12 @@ abstract class AppLocalizations {
   /// **'No sessions'**
   String get noSessions;
 
+  /// No description provided for @addPastWorkout.
+  ///
+  /// In en, this message translates to:
+  /// **'Add past workout'**
+  String get addPastWorkout;
+
   /// No description provided for @continueInLog.
   ///
   /// In en, this message translates to:

@@ -18,6 +18,7 @@
   "dbError": "Error de BD: {error}",
   "searchHint": "Buscar por entrenamiento o ejercicio",
   "noSessions": "Sin sesiones",
+  "addPastWorkout": "Añadir entrenamiento pasado",
   "continueInLog": "Continuar en Registro",
   "done": "Listo",
   "edit": "Editar",
