@@ -171,6 +171,8 @@ class _EmptyWorkoutBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final theme = Theme.of(context).textTheme;
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -179,7 +181,8 @@ class _EmptyWorkoutBody extends StatelessWidget {
           children: [
             Text(
               l10n.noWorkoutYet,
-              style: Theme.of(context).textTheme.bodyLarge,
+              style: theme.bodyLarge?.copyWith(color: muted),
+              textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
             FilledButton(
@@ -249,7 +252,7 @@ class _AddExerciseDialogState extends State<_AddExerciseDialog> {
           onPressed: () => Navigator.pop(context),
           child: Text(l10n.cancel),
         ),
-        TextButton(onPressed: _submit, child: Text(l10n.add)),
+        FilledButton(onPressed: _submit, child: Text(l10n.add)),
       ],
     );
   }
@@ -293,7 +296,7 @@ class _EditWorkoutNameDialogState extends State<_EditWorkoutNameDialog> {
           onPressed: () => Navigator.pop(context),
           child: Text(l10n.cancel),
         ),
-        TextButton(onPressed: _submit, child: Text(l10n.save)),
+        FilledButton(onPressed: _submit, child: Text(l10n.save)),
       ],
     );
   }

@@ -238,13 +238,17 @@ class HistoryScreenState extends State<HistoryScreen> {
       context: context,
       builder: (context) {
         final l10n = AppLocalizations.of(context)!;
+        final error = Theme.of(context).colorScheme.error;
         return SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: const Icon(Icons.delete_outline),
-                title: Text(l10n.deleteWorkout),
+                leading: Icon(Icons.delete_outline, color: error),
+                title: Text(
+                  l10n.deleteWorkout,
+                  style: TextStyle(color: error),
+                ),
                 subtitle: Text(subtitle),
                 onTap: () => Navigator.pop(context, 'delete'),
               ),
@@ -316,7 +320,7 @@ class HistoryScreenState extends State<HistoryScreen> {
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             child: Autocomplete<String>(
               optionsBuilder: (value) => exerciseNameSuggestions(
                 _exerciseSuggestions,
@@ -333,8 +337,6 @@ class HistoryScreenState extends State<HistoryScreen> {
                   decoration: InputDecoration(
                     hintText: l10n.searchHint,
                     prefixIcon: const Icon(Icons.search),
-                    border: const OutlineInputBorder(),
-                    isDense: true,
                   ),
                   textCapitalization: TextCapitalization.sentences,
                   onChanged: (v) => setState(() => _queryText = v),
@@ -365,7 +367,28 @@ class HistoryScreenState extends State<HistoryScreen> {
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : sessions.isEmpty
-                    ? Center(child: Text(l10n.noSessions))
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                l10n.noSessions,
+                                style: Theme.of(context).textTheme.bodyLarge,
+                                textAlign: TextAlign.center,
+                              ),
+                              if (_queryText.trim().isEmpty) ...[
+                                const SizedBox(height: 16),
+                                FilledButton(
+                                  onPressed: _addPastWorkout,
+                                  child: Text(l10n.addPastWorkout),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      )
                     : ListView.separated(
                         itemCount: sessions.length,
                         separatorBuilder: (_, _) => const Divider(height: 1),
@@ -379,9 +402,23 @@ class HistoryScreenState extends State<HistoryScreen> {
                           final name = w.name.trim();
                           final custom = hasCustomWorkoutName(name);
                           final textTheme = Theme.of(context).textTheme;
+                          final scheme = Theme.of(context).colorScheme;
                           final isToday = _isToday(w.date);
 
                           return ListTile(
+                            minLeadingWidth: 16,
+                            leading: SizedBox(
+                              width: 16,
+                              child: isToday
+                                  ? Center(
+                                      child: Icon(
+                                        Icons.circle,
+                                        size: 8,
+                                        color: scheme.primary,
+                                      ),
+                                    )
+                                  : null,
+                            ),
                             title: custom
                                 ? Column(
                                     crossAxisAlignment:
@@ -395,7 +432,9 @@ class HistoryScreenState extends State<HistoryScreen> {
                                       ),
                                       Text(
                                         dateLabel,
-                                        style: textTheme.labelMedium,
+                                        style: textTheme.labelMedium?.copyWith(
+                                          color: scheme.onSurfaceVariant,
+                                        ),
                                       ),
                                     ],
                                   )
@@ -407,6 +446,9 @@ class HistoryScreenState extends State<HistoryScreen> {
                               isToday ? l10n.continueInLog : _preview(w),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
+                              style: textTheme.bodyMedium?.copyWith(
+                                color: scheme.onSurfaceVariant,
+                              ),
                             ),
                             trailing: isToday
                                 ? const Icon(Icons.edit_note)
@@ -576,6 +618,8 @@ class _EmptyPastBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final theme = Theme.of(context).textTheme;
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
     if (!editing) {
       return Center(
         child: Padding(
@@ -595,7 +639,8 @@ class _EmptyPastBody extends StatelessWidget {
           children: [
             Text(
               l10n.noWorkoutYet,
-              style: Theme.of(context).textTheme.bodyLarge,
+              style: theme.bodyLarge?.copyWith(color: muted),
+              textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
             FilledButton(
@@ -665,7 +710,7 @@ class _AddExerciseDialogState extends State<_AddExerciseDialog> {
           onPressed: () => Navigator.pop(context),
           child: Text(l10n.cancel),
         ),
-        TextButton(onPressed: _submit, child: Text(l10n.add)),
+        FilledButton(onPressed: _submit, child: Text(l10n.add)),
       ],
     );
   }
@@ -709,7 +754,7 @@ class _RenameWorkoutDialogState extends State<_RenameWorkoutDialog> {
           onPressed: () => Navigator.pop(context),
           child: Text(l10n.cancel),
         ),
-        TextButton(onPressed: _submit, child: Text(l10n.save)),
+        FilledButton(onPressed: _submit, child: Text(l10n.save)),
       ],
     );
   }

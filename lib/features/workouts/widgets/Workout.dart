@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:gymtracker/core/utils/exercise_name.dart';
 import 'package:gymtracker/features/workouts/models/rep.dart';
@@ -28,7 +29,7 @@ class WorkoutWidget extends StatefulWidget {
 
 class _WorkoutWidgetState extends State<WorkoutWidget> {
   static const _visibleCols = 5;
-  static const _addW = 40.0;
+  static const _addW = 48.0;
   static const _tipKey = 'tip_long_press_delete';
   static const _maxGhosts = 5;
 
@@ -179,6 +180,7 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
     );
     if (result == null || !mounted) return;
 
+    HapticFeedback.lightImpact();
     final setIndex = workout.sets.indexOf(set);
     setState(() {
       set.reps.add(Rep(weight: result.$1, reps: result.$2));
@@ -205,6 +207,7 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
     );
     if (result == null || !mounted) return;
 
+    HapticFeedback.selectionClick();
     final setIndex = workout.sets.indexOf(set);
     setState(() {
       set.reps[repIndex] = Rep(
@@ -256,13 +259,14 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
       context: context,
       builder: (context) {
         final l10n = AppLocalizations.of(context)!;
+        final error = Theme.of(context).colorScheme.error;
         return SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: const Icon(Icons.delete_outline),
-                title: Text(l10n.deleteSet),
+                leading: Icon(Icons.delete_outline, color: error),
+                title: Text(l10n.deleteSet, style: TextStyle(color: error)),
                 subtitle: Text('${rep.weight}*${rep.reps}'),
                 onTap: () => Navigator.pop(context, 'delete'),
               ),
@@ -274,6 +278,7 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
     if (action != 'delete' || !mounted) return;
     if (repIndex >= set.reps.length) return;
 
+    HapticFeedback.mediumImpact();
     final removed = set.reps.removeAt(repIndex);
     setState(() {});
     await _notifyChanged();
@@ -289,6 +294,7 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
         action: SnackBarAction(
           label: l10n.undo,
           onPressed: () async {
+            HapticFeedback.selectionClick();
             set.reps.insert(repIndex, removed);
             if (mounted) setState(() {});
             await _notifyChanged();
@@ -307,13 +313,17 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
       context: context,
       builder: (context) {
         final l10n = AppLocalizations.of(context)!;
+        final error = Theme.of(context).colorScheme.error;
         return SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: const Icon(Icons.delete_outline),
-                title: Text(l10n.deleteExercise),
+                leading: Icon(Icons.delete_outline, color: error),
+                title: Text(
+                  l10n.deleteExercise,
+                  style: TextStyle(color: error),
+                ),
                 subtitle: Text(set.exercise),
                 onTap: () => Navigator.pop(context, 'delete'),
               ),
@@ -333,6 +343,7 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
   }
 
   Future<void> _removeExerciseAt(int setIndex, ExerciseSet removed) async {
+    HapticFeedback.mediumImpact();
     workout.sets.removeAt(setIndex);
     setState(() {});
     await _notifyChanged();
@@ -348,6 +359,7 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
         action: SnackBarAction(
           label: l10n.undo,
           onPressed: () async {
+            HapticFeedback.selectionClick();
             workout.sets.insert(setIndex, removed);
             if (mounted) setState(() {});
             await _notifyChanged();
@@ -452,8 +464,11 @@ class _WorkoutWidgetState extends State<WorkoutWidget> {
 }
 
 class _ExerciseBlock extends StatelessWidget {
-  static const _rowH = 40.0;
+  static const _rowH = 48.0;
   static const _fadeW = 24.0;
+  static const _setStyle = TextStyle(
+    fontFeatures: [FontFeature.tabularFigures()],
+  );
 
   final ExerciseSet set;
   final List<Rep> ghosts;
@@ -493,13 +508,13 @@ class _ExerciseBlock extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final surface = scheme.surface;
+    final nameStyle = Theme.of(context).textTheme.titleSmall?.copyWith(
+          fontWeight: FontWeight.w600,
+        );
 
     final nameText = Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Text(
-        set.exercise,
-        style: const TextStyle(fontWeight: FontWeight.bold),
-      ),
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Text(set.exercise, style: nameStyle),
     );
 
     return Column(
@@ -514,13 +529,12 @@ class _ExerciseBlock extends StatelessWidget {
             borderRadius: BorderRadius.circular(4),
             child: nameText,
           ),
-        const SizedBox(height: 2),
         Divider(
           height: 1,
           thickness: 1,
           color: scheme.outlineVariant.withValues(alpha: 0.5),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 6),
         Row(
           children: [
             Expanded(
@@ -621,13 +635,16 @@ class _ExerciseBlock extends StatelessWidget {
             ),
             if (!readOnly)
               SizedBox(
-                width: 40,
+                width: 48,
                 height: _rowH,
-                child: IconButton(
+                child: IconButton.filledTonal(
                   icon: const Icon(Icons.add, size: 20),
                   onPressed: onAdd,
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
+                  style: IconButton.styleFrom(
+                    minimumSize: const Size(40, 40),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
                 ),
               ),
           ],
@@ -641,13 +658,14 @@ class _ExerciseBlock extends StatelessWidget {
       alignment: Alignment.centerLeft,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 250),
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
         decoration: BoxDecoration(
           color: flashRep == index ? scheme.primaryContainer : null,
           borderRadius: BorderRadius.circular(4),
         ),
         child: Text(
           '${set.reps[index].weight}*${set.reps[index].reps}',
+          style: _setStyle,
         ),
       ),
     );
@@ -667,12 +685,15 @@ class _ExerciseBlock extends StatelessWidget {
       child: Align(
         alignment: Alignment.centerLeft,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
           child: Text(
             '${rep.weight}*${rep.reps}',
-            style: TextStyle(
+            style: _setStyle.copyWith(
               color: scheme.onSurface.withValues(alpha: 0.38),
               fontStyle: FontStyle.italic,
+              decoration: TextDecoration.underline,
+              decorationStyle: TextDecorationStyle.dotted,
+              decorationColor: scheme.onSurface.withValues(alpha: 0.28),
             ),
           ),
         ),
@@ -705,11 +726,13 @@ class _RepDialogState extends State<_RepDialog> {
   late final _repsCtrl = TextEditingController(
     text: widget.initialReps?.toString() ?? '',
   );
+  final _repsFocus = FocusNode();
 
   @override
   void dispose() {
     _weightCtrl.dispose();
     _repsCtrl.dispose();
+    _repsFocus.dispose();
     super.dispose();
   }
 
@@ -726,20 +749,29 @@ class _RepDialogState extends State<_RepDialog> {
     return AlertDialog(
       scrollable: true,
       title: Text(widget.title),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
+      content: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          TextField(
-            controller: _weightCtrl,
-            keyboardType: TextInputType.number,
-            decoration: InputDecoration(labelText: l10n.weight),
-            autofocus: true,
+          Expanded(
+            child: TextField(
+              controller: _weightCtrl,
+              keyboardType: TextInputType.number,
+              textInputAction: TextInputAction.next,
+              decoration: InputDecoration(labelText: l10n.weight),
+              autofocus: true,
+              onSubmitted: (_) => _repsFocus.requestFocus(),
+            ),
           ),
-          TextField(
-            controller: _repsCtrl,
-            keyboardType: TextInputType.number,
-            decoration: InputDecoration(labelText: l10n.reps),
-            onSubmitted: (_) => _submit(),
+          const SizedBox(width: 12),
+          Expanded(
+            child: TextField(
+              controller: _repsCtrl,
+              focusNode: _repsFocus,
+              keyboardType: TextInputType.number,
+              textInputAction: TextInputAction.done,
+              decoration: InputDecoration(labelText: l10n.reps),
+              onSubmitted: (_) => _submit(),
+            ),
           ),
         ],
       ),
@@ -748,7 +780,7 @@ class _RepDialogState extends State<_RepDialog> {
           onPressed: () => Navigator.pop(context),
           child: Text(l10n.cancel),
         ),
-        TextButton(onPressed: _submit, child: Text(widget.actionLabel)),
+        FilledButton(onPressed: _submit, child: Text(widget.actionLabel)),
       ],
     );
   }
@@ -810,7 +842,7 @@ class _EditNameDialogState extends State<_EditNameDialog> {
           onPressed: () => Navigator.pop(context),
           child: Text(l10n.cancel),
         ),
-        TextButton(onPressed: _submit, child: Text(l10n.save)),
+        FilledButton(onPressed: _submit, child: Text(l10n.save)),
       ],
     );
   }

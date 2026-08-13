@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:gymtracker/core/database/app_database.dart';
 import 'package:gymtracker/core/services/locale_prefs.dart';
+import 'package:gymtracker/core/theme/app_theme.dart';
 import 'package:gymtracker/features/home/screens/home_screen.dart';
 import 'package:gymtracker/features/workouts/repository/workout_repository.dart';
 import 'package:gymtracker/l10n/app_localizations.dart';
@@ -45,6 +46,9 @@ class _MainAppState extends State<MainApp> {
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return MaterialApp(
+            theme: AppTheme.light(),
+            darkTheme: AppTheme.dark(),
+            themeMode: ThemeMode.system,
             locale: locale,
             localizationsDelegates: AppLocalizations.localizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
@@ -62,6 +66,9 @@ class _MainAppState extends State<MainApp> {
         }
         if (!snapshot.hasData) {
           return MaterialApp(
+            theme: AppTheme.light(),
+            darkTheme: AppTheme.dark(),
+            themeMode: ThemeMode.system,
             locale: locale,
             localizationsDelegates: AppLocalizations.localizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
@@ -72,6 +79,9 @@ class _MainAppState extends State<MainApp> {
         }
         final repo = WorkoutRepository(snapshot.data!);
         return MaterialApp(
+          theme: AppTheme.light(),
+          darkTheme: AppTheme.dark(),
+          themeMode: ThemeMode.system,
           locale: locale,
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
